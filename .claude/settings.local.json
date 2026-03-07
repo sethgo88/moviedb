@@ -3,7 +3,8 @@
     "allow": [
       "Bash(pnpm lint:*)",
       "Bash(pnpm format:*)",
-      "Bash(pnpm:*)"
+      "Bash(pnpm:*)",
+      "Bash(git push:*)"
     ]
   }
 }

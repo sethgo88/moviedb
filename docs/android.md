@@ -79,7 +79,7 @@ In `src-tauri/gen/android/app/src/main/AndroidManifest.xml`:
 <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 ```
 
-`INTERNET` — required for Supabase sync and TMDB API calls.
+`INTERNET` — required for PocketBase sync and TMDB API calls.
 `ACCESS_NETWORK_STATE` — used by `isOnline()` in the sync service.
 
 ---

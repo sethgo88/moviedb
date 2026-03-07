@@ -83,7 +83,7 @@ pnpm format    # biome format --write . — auto-fix formatting
 ## TanStack Query
 
 **What:** Async state manager — caching, background refetch, loading/error states.
-**Why:** Eliminates manual `useEffect` data fetching, loading state booleans, and cache invalidation bugs. Works identically for SQLite, TMDB, and Supabase calls.
+**Why:** Eliminates manual `useEffect` data fetching, loading state booleans, and cache invalidation bugs. Works identically for SQLite, TMDB, and PocketBase calls.
 
 **This is the most important architectural rule:** every async operation goes through TanStack Query.
 
@@ -149,7 +149,7 @@ export const useMoviesStore = create<MoviesStore>((set) => ({
 ## Zod
 
 **What:** Runtime schema validation and TypeScript type inference.
-**Why:** TypeScript types are erased at runtime. Zod validates that external data (TMDB responses, Supabase rows) actually matches what the types say.
+**Why:** TypeScript types are erased at runtime. Zod validates that external data (TMDB responses, PocketBase records) actually matches what the types say.
 
 **Pattern — infer types from schemas:**
 ```ts
@@ -166,7 +166,7 @@ export type Movie = z.infer<typeof MovieSchema>
 ```
 
 **Rules:**
-- Validate at system boundaries: TMDB API responses, Supabase results, form submissions
+- Validate at system boundaries: TMDB API responses, PocketBase results, form submissions
 - Do not validate data that never leaves the app (e.g., internal state from a Zustand store)
 - Keep schemas in `*.schema.ts`, types in `*.types.ts` (or infer the type in the schema file)
 
@@ -196,19 +196,19 @@ export type Movie = z.infer<typeof MovieSchema>
 
 ---
 
-## Supabase
+## PocketBase
 
-**What:** Hosted Postgres + auth + realtime (we use Postgres + auth only).
-**Why:** Free tier, generous limits, magic link auth, Row Level Security built in.
+**What:** A single self-hosted Go binary that provides a REST API, SQLite storage, real-time subscriptions, and built-in auth.
+**Why:** Zero infrastructure overhead for a personal app. One binary on a home server, no Docker, no managed cloud. Provides everything needed for infrequent sync from a home network.
 
 **In this project:**
-- Mirrors the SQLite schema in Postgres
-- Used only for sync (push/pull) and auth — never for live reads
-- Magic link email auth — no passwords
-- RLS policies required even for personal use
+- Mirrors the SQLite schema as a PocketBase collection
+- Used only for sync (push/pull) — never for live reads
+- Simple username/password or token auth — no magic links needed
+- Runs on the home media server (Windows or Linux)
 
-**Client:** `src/lib/supabase.ts` — configured singleton.
-**Keys:** Stored in Tauri's secure store, not in `.env` for production.
+**Client:** `src/lib/pocketbase.ts` — configured singleton using the PocketBase JS SDK.
+**URL + credentials:** Stored in Tauri's secure store — never hardcoded.
 
 ---
 
@@ -222,5 +222,5 @@ export type Movie = z.infer<typeof MovieSchema>
 **What to test:**
 - `*.service.ts` functions — mock the DB, assert correct SQL/results
 - `*.schema.ts` — valid and invalid inputs
-- `sync.service.ts` — mock `isOnline` and Supabase client
+- `sync.service.ts` — mock `isOnline` and PocketBase client
 - Complex form components — render, validate, submit

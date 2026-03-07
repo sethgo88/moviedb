@@ -185,7 +185,7 @@ The app should appear on the device with hot reload active.
 ### Branch naming
 | Type | Pattern | Example |
 |---|---|---|
-| Phase | `phase/<n>-<description>` | `phase/5-supabase` |
+| Phase | `phase/<n>-<description>` | `phase/5-pocketbase` |
 | Feature | `feat/<description>` | `feat/poster-cache` |
 | Bug fix | `fix/<description>` | `fix/sync-conflict` |
 
@@ -193,14 +193,14 @@ The app should appear on the device with hot reload active.
 ```bash
 git checkout main
 git pull
-git checkout -b phase/5-supabase
+git checkout -b phase/5-pocketbase
 ```
 
 ### Finishing a phase
 Push the branch and open a PR into `main`. Merge only when lint, typecheck, and a smoke test pass.
 
 ```bash
-git push -u origin phase/5-supabase
+git push -u origin phase/5-pocketbase
 # open PR on GitHub
 ```
 

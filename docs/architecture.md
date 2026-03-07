@@ -14,9 +14,9 @@
 └──────────┬──────────────────────────┬───────────┘
            │                          │
 ┌──────────▼──────────┐   ┌──────────▼───────────┐
-│   SQLite (local)     │   │   Supabase (cloud)    │
-│   tauri-plugin-sql   │   │   @supabase/supabase-js│
-│   src/lib/db.ts      │   │   src/lib/supabase.ts  │
+│   SQLite (local)     │   │   PocketBase (sync)   │
+│   tauri-plugin-sql   │   │   pocketbase JS SDK   │
+│   src/lib/db.ts      │   │   src/lib/pocketbase.ts│
 └─────────────────────┘   └───────────────────────┘
            │
 ┌──────────▼──────────┐   ┌───────────────────────┐
@@ -44,7 +44,7 @@ All business logic. No JSX. Divided by domain:
 | `movies` | `movies.store.ts` | Zustand — UI state, active filters, optimistic state |
 | `movies` | `movies.schema.ts` | Zod schemas for the `Movie` domain |
 | `movies` | `movies.types.ts` | TypeScript types (inferred from Zod where possible) |
-| `sync` | `sync.service.ts` | Push/pull logic between SQLite and Supabase |
+| `sync` | `sync.service.ts` | Push/pull logic between SQLite and PocketBase |
 | `sync` | `sync.store.ts` | Sync state — isSyncing, lastSyncedAt, errors |
 | `tmdb` | `tmdb.service.ts` | TMDB REST API calls |
 | `tmdb` | `tmdb.queries.ts` | TanStack Query hooks for TMDB search/details |
@@ -53,7 +53,7 @@ All business logic. No JSX. Divided by domain:
 ### `src/lib/`
 React-free singletons and utilities:
 - `db.ts` — typed wrapper around `@tauri-apps/plugin-sql`
-- `supabase.ts` — configured Supabase client
+- `pocketbase.ts` — configured PocketBase client
 - `cn.ts` — Tailwind class merging utility
 - `date.ts` — ISO 8601 helpers
 
@@ -90,9 +90,9 @@ Check for pending soft deletes (deleted_at IS NOT NULL)
 DeleteConfirmationView shown — user selects which to confirm
         ↓
 sync.service.runSync(skipDeleteConfirmation: false)
-  ├── PUSH: local rows where updated_at > last_synced_at → Supabase upsert
-  ├── PUSH DELETES: confirmed soft deletes → Supabase delete, then hard local delete
-  └── PULL: Supabase rows where updated_at > last_synced_at → SQLite upsert
+  ├── PUSH: local rows where updated_at > last_synced_at → PocketBase upsert
+  ├── PUSH DELETES: confirmed soft deletes → PocketBase delete, then hard local delete
+  └── PULL: PocketBase records where updated_at > last_synced_at → SQLite upsert
         ↓
 Update sync_meta.last_synced_at
         ↓
@@ -101,9 +101,9 @@ invalidateQueries(['movies'])
 
 ## Local-First Principles
 
-1. **All reads come from SQLite.** Supabase is never queried for display data, only for sync.
-2. **The app works with no network.** Offline changes accumulate and sync when reconnected.
-3. **Soft deletes for safety.** A delete while offline queues the row with `deleted_at` set. The user confirms pending deletes before they propagate to the cloud.
+1. **All reads come from SQLite.** PocketBase is never queried for display data, only for sync.
+2. **The app works with no network.** Offline changes accumulate and sync when connected to the home network.
+3. **Soft deletes for safety.** A delete while offline queues the row with `deleted_at` set. The user confirms pending deletes before they propagate to PocketBase.
 4. **Last-write-wins conflict resolution.** The row with the newer `updated_at` wins during a merge. This is acceptable for a personal app with one user.
 
 ## Tauri 2 Capabilities

@@ -7,23 +7,23 @@
 
 ## Git Branching Strategy
 - `main` is always stable — never commit directly to it
-- Branch per phase: `phase/4-sqlite`, `phase/5-supabase`, `phase/6-sync`, etc.
+- Branch per phase: `phase/4-sqlite`, `phase/5-pocketbase`, `phase/6-sync`, etc.
 - Branch per feature within a phase if the change is self-contained
 - Merge to `main` via PR when a phase is complete and stable
 - Branch naming: `phase/<n>-<short-description>` for phases, `feat/<short-description>` for features, `fix/<short-description>` for bug fixes
 
 ## Project Overview
 Tauri 2 + React + TypeScript Android app for tracking a personal movie collection.
-Local-first with SQLite, synced to Supabase, movie metadata from TMDB API.
+Local-first with SQLite, synced to self-hosted PocketBase, movie metadata from TMDB API.
 
 ## Stack
 - **Frontend:** React 19, TypeScript (strict), Tailwind CSS, Biome
 - **Routing:** TanStack Router (fully type-safe)
-- **Data fetching:** TanStack Query (wraps ALL async calls — SQLite, TMDB, Supabase)
+- **Data fetching:** TanStack Query (wraps ALL async calls — SQLite, TMDB, PocketBase)
 - **State:** Zustand (UI state, filters, optimistic updates)
 - **Validation:** Zod (all API responses, forms)
 - **Backend/native:** Tauri 2 (Rust), tauri-plugin-sql (SQLite)
-- **Cloud:** Supabase (Postgres mirror, auth via magic link)
+- **Cloud:** PocketBase (self-hosted sync server, REST API)
 - **Package manager:** pnpm
 
 ## Key Commands
@@ -52,7 +52,7 @@ src/
     movies/       # movies.store.ts, movies.queries.ts, movies.service.ts, movies.schema.ts, movies.types.ts
     sync/         # sync.store.ts, sync.service.ts, sync.types.ts
     tmdb/         # tmdb.service.ts, tmdb.schema.ts, tmdb.types.ts
-  lib/            # db.ts, supabase.ts, date.ts, cn.ts (React-free utilities)
+  lib/            # db.ts, pocketbase.ts, date.ts, cn.ts (React-free utilities)
   hooks/          # useDebounce.ts, useOnlineStatus.ts, useSync.ts
   types/
     global.d.ts
@@ -88,7 +88,7 @@ Single row: `last_synced_at TEXT` — sync checkpoint, null = never synced.
 ## Key Architectural Decisions
 
 ### TanStack Query for everything async
-Use `useQuery` / `useMutation` for ALL async data — SQLite via `movies.service.ts`, TMDB, and Supabase. Never fetch in `useEffect`. Invalidate query keys after mutations.
+Use `useQuery` / `useMutation` for ALL async data — SQLite via `movies.service.ts`, TMDB, and PocketBase. Never fetch in `useEffect`. Invalidate query keys after mutations.
 
 ### Sync strategy: last-write-wins via `updated_at`
 - `updated_at` is maintained by a SQLite trigger — never rely on the service layer to set it on UPDATE.
@@ -102,8 +102,8 @@ The same movie title can have separate rows for physical vs digital copies. Neve
 ### Poster caching
 Cache only `w185` TMDB posters (~35KB each). Store in `{appDataDir}/poster-cache/{tmdb_id}_w185.jpg`. LRU eviction at 100MB, 30-day TTL. The `Poster` atom falls back: local cache → TMDB URL → placeholder.
 
-### Supabase keys
-Store in Tauri's secure store — never hardcoded, never in `.env` for production.
+### PocketBase credentials
+Server URL and auth token stored in Tauri's secure store — never hardcoded, never in `.env` for production.
 
 ## TypeScript Rules
 - `"strict": true` — no exceptions
@@ -159,7 +159,7 @@ The `docs/` folder contains the developer-facing documentation for this project.
 - [x] Phase 2: Project Scaffolding (scaffold exists, structure TBD)
 - [ ] Phase 3: Android Target Configuration
 - [ ] Phase 4: Local Storage — SQLite
-- [ ] Phase 5: Cloud Storage — Supabase
+- [ ] Phase 5: Sync Storage — PocketBase
 - [ ] Phase 6: Sync
 - [ ] Phase 7: Core App Features
 - [ ] Phase 8: Polish & QA

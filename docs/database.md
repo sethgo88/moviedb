@@ -4,9 +4,9 @@
 
 The app uses two databases:
 - **SQLite** (local, always available) — primary data store
-- **Supabase Postgres** (cloud, online only) — sync mirror
+- **PocketBase** (self-hosted, home network) — sync mirror
 
-All reads come from SQLite. Supabase is only touched during sync.
+All reads come from SQLite. PocketBase is only touched during sync.
 
 ---
 
@@ -107,18 +107,22 @@ let migrations = vec![
 
 ---
 
-## Supabase Schema
+## PocketBase Collection Schema
 
-Mirror the SQLite schema in Postgres. Key differences:
+PocketBase uses collections (analogous to tables). The `movies` collection mirrors the SQLite schema with these differences:
 
-| SQLite | Supabase Postgres |
+| SQLite | PocketBase |
 |---|---|
-| `TEXT` (ISO 8601) for timestamps | `TIMESTAMPTZ` |
-| `INTEGER` (0/1) for booleans | `BOOLEAN` |
-| `TEXT` UUID | `UUID` |
-| Manual trigger for `updated_at` | Same — add a Postgres trigger |
+| `TEXT` UUID primary key | PocketBase generates its own `id` (15-char string) — store local UUID in a separate `local_id` field |
+| `INTEGER` (0/1) for booleans | `Bool` field type |
+| `TEXT` (ISO 8601) for timestamps | `Date` field type |
+| `REAL` for ratings | `Number` field type |
 
-Enable Row Level Security on all tables. Even for personal use — it's a good habit and prevents accidental exposure if the anon key is leaked.
+### Sync ID mapping
+Because PocketBase generates its own IDs, each record stores the local SQLite UUID in a `local_id` text field. Sync uses `local_id` to match remote records to local rows.
+
+### Auth
+PocketBase supports simple username/password auth. Store the server URL and auth token in Tauri's secure store — never hardcode them.
 
 ---
 
@@ -127,12 +131,12 @@ Enable Row Level Security on all tables. Even for personal use — it's a good h
 ### Algorithm: last-write-wins via `updated_at`
 
 1. Read `last_synced_at` from `sync_meta`
-2. **PUSH:** Find local rows where `updated_at > last_synced_at AND deleted_at IS NULL` → upsert to Supabase
-3. **PUSH DELETES:** Hard delete confirmed soft-deleted rows from Supabase, then locally
-4. **PULL:** Fetch Supabase rows where `updated_at > last_synced_at` → upsert to local SQLite
+2. **PUSH:** Find local rows where `updated_at > last_synced_at AND deleted_at IS NULL` → upsert to PocketBase (match on `local_id`)
+3. **PUSH DELETES:** Hard delete confirmed soft-deleted rows from PocketBase, then locally
+4. **PULL:** Fetch PocketBase records where `updated_at > last_synced_at` → upsert to local SQLite (match on `local_id`)
 5. Update `sync_meta.last_synced_at` to now
 
-**First sync** (when `last_synced_at IS NULL`): push all local rows, pull all remote rows.
+**First sync** (when `last_synced_at IS NULL`): push all local rows, pull all remote records.
 
 ### Conflict resolution
 
@@ -144,12 +148,12 @@ The row with the newer `updated_at` wins. For a single-user personal app this is
 User deletes movie
         ↓
 isOnline?
-   YES → hard delete locally → sync immediately → delete from Supabase
+   YES → hard delete locally → sync immediately → delete from PocketBase
    NO  → set deleted_at = now → row hidden from UI → queued for sync
         ↓ (next manual sync)
 Pending soft deletes exist?
    YES → show DeleteConfirmationView (user selects which to confirm)
-       → confirmed: hard delete locally + propagate to Supabase
+       → confirmed: hard delete locally + propagate to PocketBase
        → skipped: leave soft delete in place
    NO  → run sync normally
 ```

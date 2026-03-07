@@ -1,10 +1,10 @@
 import type { z } from "zod";
 import type {
-  MovieFormatSchema,
-  MovieSchema,
-  MovieStatusSchema,
-  NewMovieSchema,
-  UpdateMovieSchema,
+	MovieFormatSchema,
+	MovieSchema,
+	MovieStatusSchema,
+	NewMovieSchema,
+	UpdateMovieSchema,
 } from "./movies.schema";
 
 export type MovieStatus = z.infer<typeof MovieStatusSchema>;

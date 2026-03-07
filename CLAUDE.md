@@ -5,6 +5,13 @@
 
 **After every code change, and before moving on to the next task, always run `pnpm lint` and `pnpm tsc --noEmit`.** Fix all errors and warnings before proceeding. Never leave code in a state that fails lint or type-check.
 
+## Git Branching Strategy
+- `main` is always stable — never commit directly to it
+- Branch per phase: `phase/4-sqlite`, `phase/5-supabase`, `phase/6-sync`, etc.
+- Branch per feature within a phase if the change is self-contained
+- Merge to `main` via PR when a phase is complete and stable
+- Branch naming: `phase/<n>-<short-description>` for phases, `feat/<short-description>` for features, `fix/<short-description>` for bug fixes
+
 ## Project Overview
 Tauri 2 + React + TypeScript Android app for tracking a personal movie collection.
 Local-first with SQLite, synced to Supabase, movie metadata from TMDB API.

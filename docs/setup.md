@@ -178,6 +178,34 @@ The app should appear on the device with hot reload active.
 
 ---
 
+## Git Workflow
+
+`main` is always stable. Never commit directly to it.
+
+### Branch naming
+| Type | Pattern | Example |
+|---|---|---|
+| Phase | `phase/<n>-<description>` | `phase/5-supabase` |
+| Feature | `feat/<description>` | `feat/poster-cache` |
+| Bug fix | `fix/<description>` | `fix/sync-conflict` |
+
+### Starting a new phase
+```bash
+git checkout main
+git pull
+git checkout -b phase/5-supabase
+```
+
+### Finishing a phase
+Push the branch and open a PR into `main`. Merge only when lint, typecheck, and a smoke test pass.
+
+```bash
+git push -u origin phase/5-supabase
+# open PR on GitHub
+```
+
+---
+
 ## IDE
 
 VS Code with these extensions:

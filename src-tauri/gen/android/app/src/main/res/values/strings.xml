@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">moviedb</string>
+    <string name="main_activity_title">moviedb</string>
+</resources>

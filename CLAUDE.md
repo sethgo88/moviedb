@@ -1,7 +1,9 @@
 # Movie Collection App — CLAUDE.md
 
-## Workflow Rule
+## Workflow Rules
 **Always present a written plan and wait for explicit user approval before writing or modifying any code or files.** No exceptions — even for small changes.
+
+**After every code change, and before moving on to the next task, always run `pnpm lint` and `pnpm tsc --noEmit`.** Fix all errors and warnings before proceeding. Never leave code in a state that fails lint or type-check.
 
 ## Project Overview
 Tauri 2 + React + TypeScript Android app for tracking a personal movie collection.

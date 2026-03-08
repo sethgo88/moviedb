@@ -18,52 +18,57 @@ export function MovieCard({ movie }: MovieCardProps) {
 	return (
 		<button
 			type="button"
-			className="flex min-h-18 w-full items-start gap-3 rounded-xl bg-white/5 p-3 text-left transition-colors active:bg-white/10"
+			className="relative flex min-h-18 w-full overflow-hidden rounded-xl bg-gray-800 p-3 text-left transition-opacity active:opacity-80"
 			onClick={() =>
 				navigate({ to: "/movie/$id/edit", params: { id: movie.id } })
 			}
 		>
-			{/* Poster */}
-			<div className="h-16 w-11 shrink-0 overflow-hidden rounded bg-white/10">
-				{movie.poster_url ? (
-					<img
-						src={movie.poster_url}
-						alt={movie.title}
-						className="h-full w-full object-cover"
-					/>
-				) : (
-					<div className="flex h-full w-full items-center justify-center">
-						<Film size={16} className="text-white/20" />
-					</div>
-				)}
-			</div>
-
-			<div className="min-w-0 flex-1">
-				<p className="truncate font-semibold text-white">{movie.title}</p>
-				{movie.year !== null && (
-					<p className="text-sm text-white/60">{movie.year}</p>
-				)}
-				<div className="mt-1 flex gap-1.5">
-					<Badge label={movie.status} className={statusClassName} />
-					<Badge label={movie.format} className="bg-white/10 text-white/70" />
+			{/* Poster background */}
+			{movie.poster_url ? (
+				<img
+					src={movie.poster_url}
+					alt=""
+					aria-hidden="true"
+					className="absolute inset-0 h-full w-full object-cover object-center"
+				/>
+			) : (
+				<div className="absolute inset-0 flex items-center justify-center">
+					<Film size={32} className="text-white/10" />
 				</div>
-			</div>
+			)}
 
-			<div className="flex flex-col h-full flex-1 gap-2">
-				{movie.personal_rating !== null && (
-					<div className="flex items-center gap-1.5">
-						<Star size={16} className="fill-yellow-400 text-yellow-400" />
-						<span className="text-sm font-medium">
-							{movie.personal_rating % 1 === 0
-								? movie.personal_rating
-								: movie.personal_rating.toFixed(1)}{" "}
-							/ 10
-						</span>
+			{/* Overlay */}
+			<div className="absolute inset-0 bg-black/30" />
+
+			{/* Content */}
+			<div className="relative flex w-full items-start gap-3">
+				<div className="min-w-0 flex-1">
+					<p className="truncate font-semibold text-white">{movie.title}</p>
+					{movie.year !== null && (
+						<p className="text-sm text-white/60">{movie.year}</p>
+					)}
+					<div className="mt-1 flex gap-1.5">
+						<Badge label={movie.status} className={statusClassName} />
+						<Badge label={movie.format} className="bg-white/10 text-white/70" />
 					</div>
-				)}
-				<div className="flex gap-2">
-					{movie.is_physical === 1 && <Disc3 size={16} />}
-					{movie.is_digital === 1 && <TvMinimalPlay size={16} />}
+				</div>
+
+				<div className="flex h-full flex-1 flex-col gap-2">
+					{movie.personal_rating !== null && (
+						<div className="flex items-center gap-1.5">
+							<Star size={16} className="fill-yellow-400 text-yellow-400" />
+							<span className="text-sm font-medium">
+								{movie.personal_rating % 1 === 0
+									? movie.personal_rating
+									: movie.personal_rating.toFixed(1)}{" "}
+								/ 10
+							</span>
+						</div>
+					)}
+					<div className="flex gap-2">
+						{movie.is_physical === 1 && <Disc3 size={16} />}
+						{movie.is_digital === 1 && <TvMinimalPlay size={16} />}
+					</div>
 				</div>
 			</div>
 		</button>

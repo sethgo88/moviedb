@@ -2,12 +2,12 @@ import {
 	createMemoryHistory,
 	createRoute,
 	createRouter,
+	redirect,
 } from "@tanstack/react-router";
 import { rootRoute } from "./routes/__root";
 import { AddMovieView } from "./views/AddMovieView";
 import { CollectionView } from "./views/CollectionView";
 import { EditMovieView } from "./views/EditMovieView";
-import { MovieDetailView } from "./views/MovieDetailView";
 import { SettingsView } from "./views/SettingsView";
 
 const indexRoute = createRoute({
@@ -25,7 +25,9 @@ const addMovieRoute = createRoute({
 const movieDetailRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/movie/$id",
-	component: MovieDetailView,
+	beforeLoad: ({ params }) => {
+		throw redirect({ to: "/movie/$id/edit", params });
+	},
 });
 
 const editMovieRoute = createRoute({

@@ -8,6 +8,8 @@ interface ConfirmSheetProps {
 	onConfirm: () => void;
 	onCancel: () => void;
 	isDangerous?: boolean;
+	secondaryLabel?: string;
+	onSecondary?: () => void;
 }
 
 export function ConfirmSheet({
@@ -18,6 +20,8 @@ export function ConfirmSheet({
 	onConfirm,
 	onCancel,
 	isDangerous = false,
+	secondaryLabel,
+	onSecondary,
 }: ConfirmSheetProps) {
 	return (
 		<>
@@ -56,6 +60,15 @@ export function ConfirmSheet({
 					>
 						{confirmLabel}
 					</button>
+					{secondaryLabel && onSecondary && (
+						<button
+							type="button"
+							className="min-h-[48px] w-full rounded-xl bg-blue-600 font-semibold text-white transition-opacity active:opacity-80"
+							onClick={onSecondary}
+						>
+							{secondaryLabel}
+						</button>
+					)}
 					<button
 						type="button"
 						className="min-h-[48px] w-full rounded-xl font-semibold text-white/70 transition-opacity active:opacity-80"

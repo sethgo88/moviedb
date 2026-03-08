@@ -1,6 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
-import type { MovieFormValues } from "../components/organisms/MovieForm";
-import { MovieForm } from "../components/organisms/MovieForm";
+import type { MovieFormValues } from "../components/organisms/MovieForm/movie-form";
+import { MovieForm } from "../components/organisms/MovieForm/movie-form";
 import { useCreateMovie } from "../features/movies/movies.queries";
 import { NewMovieSchema } from "../features/movies/movies.schema";
 

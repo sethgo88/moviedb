@@ -29,17 +29,25 @@ views      Templates + real data. One per route.
 
 ## File Structure — One Component Per Folder
 
-Every component, even atoms, lives in its own folder with a single `index.tsx` file:
+Every component, even atoms, lives in its own folder. The implementation file is named after the component in **lowercase-hyphen** format (not `index.tsx`):
 
 ```
 src/components/atoms/Button/
-  index.tsx         ← implementation (export directly, no separate barrel)
-  Button.test.tsx   ← optional, co-located
+  button.tsx         ← implementation (export directly, no separate barrel)
+  button.test.tsx    ← optional, co-located
+
+src/components/molecules/ConfirmSheet/
+  confirm-sheet.tsx
+
+src/components/organisms/MovieCard/
+  movie-card.tsx
 ```
 
-Import consumers use the folder path:
+Import consumers use the full path including the filename:
 ```ts
-import { Button } from '../components/atoms/Button'
+import { Button } from '../components/atoms/Button/button'
+import { ConfirmSheet } from '../components/molecules/ConfirmSheet/confirm-sheet'
+import { MovieCard } from '../components/organisms/MovieCard/movie-card'
 ```
 
 No path aliases (`@/`) are configured — use relative paths.
@@ -255,6 +263,39 @@ This app is dark mode only. Do not add `dark:` variants — write dark styles as
 // Wrong — unnecessary dark: variants
 <div className="bg-white dark:bg-gray-950 text-black dark:text-white">
 ```
+
+---
+
+## Safe Areas (Android)
+
+The app runs edge-to-edge on Android. Every view must respect device safe areas — the camera cutout at the top and the gesture navigation bar at the bottom.
+
+### Rules
+
+- **Top:** Any element that appears at the top of the screen (headers, fixed overlays, toasts) must clear `env(safe-area-inset-top)`. Use inline `style` since Tailwind does not have a built-in safe-area utility:
+  ```tsx
+  style={{ paddingTop: "env(safe-area-inset-top)" }}
+  // or offset from it:
+  style={{ top: "calc(env(safe-area-inset-top) + 16px)" }}
+  ```
+
+- **Bottom:** Any element at the bottom of the screen (nav bars, bottom sheets, fixed buttons) must clear `env(safe-area-inset-bottom)` **plus an additional 15px** of visual breathing room:
+  ```tsx
+  style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 15px)" }}
+  ```
+  The `ConfirmSheet` already does this. Match this pattern for any new bottom-anchored UI.
+
+- **Scrollable content:** Full-screen scroll containers should add bottom padding so the last item isn't hidden behind the gesture bar:
+  ```tsx
+  <div className="flex-1 overflow-y-auto" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 15px)" }}>
+  ```
+
+### What uses safe areas today
+
+| Component | Edge | Implementation |
+|---|---|---|
+| `ConfirmSheet` | Bottom | `paddingBottom: calc(env(safe-area-inset-bottom) + 24px)` |
+| `Toast` | Top | `top: calc(env(safe-area-inset-top) + 16px)` |
 
 ---
 

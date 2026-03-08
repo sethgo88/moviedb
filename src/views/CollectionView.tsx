@@ -1,8 +1,8 @@
 import { useNavigate } from "@tanstack/react-router";
-import { Button } from "../components/atoms/Button";
-import { Spinner } from "../components/atoms/Spinner";
-import { SearchBar } from "../components/molecules/SearchBar";
-import { MovieCard } from "../components/organisms/MovieCard";
+import { Button } from "../components/atoms/Button/button";
+import { Spinner } from "../components/atoms/Spinner/spinner";
+import { SearchBar } from "../components/molecules/SearchBar/search-bar";
+import { MovieCard } from "../components/organisms/MovieCard/movie-card";
 import { useMovies } from "../features/movies/movies.queries";
 import { useMoviesStore } from "../features/movies/movies.store";
 import { useDebounce } from "../hooks/useDebounce";

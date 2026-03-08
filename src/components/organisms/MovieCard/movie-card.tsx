@@ -1,7 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
-import { Disc3, Star, TvMinimalPlay } from "lucide-react";
+import { Disc3, Film, Star, TvMinimalPlay } from "lucide-react";
 import type { Movie } from "../../../features/movies/movies.types";
-import { Badge } from "../../atoms/Badge";
+import { Badge } from "../../atoms/Badge/badge";
 
 interface MovieCardProps {
 	movie: Movie;
@@ -19,10 +19,24 @@ export function MovieCard({ movie }: MovieCardProps) {
 		<button
 			type="button"
 			className="flex min-h-18 w-full items-start gap-3 rounded-xl bg-white/5 p-3 text-left transition-colors active:bg-white/10"
-			onClick={() => navigate({ to: "/movie/$id", params: { id: movie.id } })}
+			onClick={() =>
+				navigate({ to: "/movie/$id/edit", params: { id: movie.id } })
+			}
 		>
-			{/* Poster placeholder — replaced when poster cache is implemented */}
-			<div className="h-16 w-11 shrink-0 rounded bg-white/10" />
+			{/* Poster */}
+			<div className="h-16 w-11 shrink-0 overflow-hidden rounded bg-white/10">
+				{movie.poster_url ? (
+					<img
+						src={movie.poster_url}
+						alt={movie.title}
+						className="h-full w-full object-cover"
+					/>
+				) : (
+					<div className="flex h-full w-full items-center justify-center">
+						<Film size={16} className="text-white/20" />
+					</div>
+				)}
+			</div>
 
 			<div className="min-w-0 flex-1">
 				<p className="truncate font-semibold text-white">{movie.title}</p>
@@ -47,7 +61,7 @@ export function MovieCard({ movie }: MovieCardProps) {
 						</span>
 					</div>
 				)}
-				<div>
+				<div className="flex gap-2">
 					{movie.is_physical === 1 && <Disc3 size={16} />}
 					{movie.is_digital === 1 && <TvMinimalPlay size={16} />}
 				</div>

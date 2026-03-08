@@ -69,7 +69,7 @@ src/
 ```
 
 **Rule:** `features/` holds logic only (stores, services, schemas, types). All UI lives in `components/` and `views/`.
-**Rule:** One folder per component — even atoms — to allow co-located tests. Each component is a single `index.tsx` file (implementation directly in the index, no separate barrel).
+**Rule:** One folder per component — even atoms — to allow co-located tests. Each component is a single file named in **lowercase-hyphen** format matching the folder (e.g. `Button/button.tsx`, `MovieCard/movie-card.tsx`). No `index.tsx`, no separate barrel. Imports must include the filename: `import { Button } from '../atoms/Button/button'`.
 
 ## Data Model
 ### SQLite `movies` table (UUID primary keys)

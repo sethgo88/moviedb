@@ -10,15 +10,14 @@ import type {
 	MovieFormat,
 	MovieStatus,
 } from "../../../features/movies/movies.types";
-import { Button } from "../../atoms/Button";
-import { PosterPicker } from "../../atoms/PosterPicker";
-import { Select } from "../../atoms/Select";
-import { Slider } from "../../atoms/Slider";
-import { Spinner } from "../../atoms/Spinner";
-import { Toggle } from "../../atoms/Toggle";
-import { ConfirmSheet } from "../../molecules/ConfirmSheet";
-import { FormField } from "../../molecules/FormField";
-import { ToggleGroup } from "../../molecules/ToggleGroup";
+import { PosterPicker } from "../../atoms/PosterPicker/poster-picker";
+import { Select } from "../../atoms/Select/select";
+import { Slider } from "../../atoms/Slider/slider";
+import { Spinner } from "../../atoms/Spinner/spinner";
+import { Toggle } from "../../atoms/Toggle/toggle";
+import { ConfirmSheet } from "../../molecules/ConfirmSheet/confirm-sheet";
+import { FormField } from "../../molecules/FormField/form-field";
+import { ToggleGroup } from "../../molecules/ToggleGroup/toggle-group";
 
 const STATUS_OPTIONS: { label: string; value: MovieStatus }[] = [
 	{ label: "Owned", value: "OWNED" },
@@ -81,14 +80,16 @@ export function MovieForm({
 	const { id } = useParams({ strict: false });
 	const form = useForm({
 		defaultValues: { ...DEFAULTS, ...initialValues },
-		onSubmit: async ({ value }) => {
+		onSubmit: async ({ value, formApi }) => {
 			await onSubmit(value);
+			formApi.reset(value);
 		},
 	});
 
 	const { data: movie, isLoading } = useMovie(id);
 	const { mutate: softDelete, isPending: isDeleting } = useSoftDeleteMovie();
 	const [showDelete, setShowDelete] = useState(false);
+	const [showDiscard, setShowDiscard] = useState(false);
 
 	if (submitLabel === "Save") {
 		if (isLoading) return <Spinner />;
@@ -112,9 +113,17 @@ export function MovieForm({
 		<div className="flex h-full flex-col bg-gray-950 text-white">
 			{/* Header */}
 			<div className="flex items-center gap-3 border-b border-white/10 p-4">
-				<button type="button" className="text-blue-400" onClick={onCancel}>
-					Cancel
-				</button>
+				<form.Subscribe selector={(s) => s.isDirty}>
+					{(isDirty) => (
+						<button
+							type="button"
+							className="text-blue-400"
+							onClick={() => (isDirty ? setShowDiscard(true) : onCancel())}
+						>
+							Back
+						</button>
+					)}
+				</form.Subscribe>
 				<h1 className="flex-1 text-center text-lg font-semibold">{title}</h1>
 				<form.Subscribe selector={(s) => s.isSubmitting}>
 					{(isSubmitting) => (
@@ -311,6 +320,21 @@ export function MovieForm({
 					</div>
 				)}
 			</div>
+
+			<ConfirmSheet
+				isOpen={showDiscard}
+				title="Discard Changes"
+				message="You have unsaved changes. Discard them?"
+				confirmLabel="Discard"
+				isDangerous
+				onConfirm={onCancel}
+				onCancel={() => setShowDiscard(false)}
+				secondaryLabel="Save & Continue"
+				onSecondary={async () => {
+					await form.handleSubmit();
+					onCancel();
+				}}
+			/>
 		</div>
 	);
 }

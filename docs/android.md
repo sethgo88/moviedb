@@ -84,6 +84,17 @@ In `src-tauri/gen/android/app/src/main/AndroidManifest.xml`:
 
 **Note:** `tauri-plugin-dialog` handles gallery/media access on Android via the system file picker — no additional `READ_MEDIA_IMAGES` manifest permission is needed because the picker uses Android's built-in content URI system.
 
+## Safe Areas
+
+The app runs edge-to-edge. All UI must respect device safe areas — the camera cutout at the top and the gesture navigation bar at the bottom.
+
+- Use `env(safe-area-inset-top)` for top-anchored elements (headers, toasts, fixed overlays).
+- Use `env(safe-area-inset-bottom) + 15px` for bottom-anchored elements (nav bar, sheets, fixed buttons).
+
+See **`docs/patterns.md` → Safe Areas** for the full pattern with code examples.
+
+---
+
 ## Back Button (Android)
 
 `src/hooks/useAndroidBackButton.ts` listens for a Tauri event to handle Android back navigation. **TODO (Phase 3):** Verify the exact event name on a real device — it may differ between Tauri versions. If the back button does nothing on device, check the event name in the Tauri Android plugin source.

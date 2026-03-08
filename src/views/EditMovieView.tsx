@@ -1,7 +1,9 @@
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { Spinner } from "../components/atoms/Spinner";
-import type { MovieFormValues } from "../components/organisms/MovieForm";
-import { MovieForm } from "../components/organisms/MovieForm";
+import { useState } from "react";
+import { Spinner } from "../components/atoms/Spinner/spinner";
+import { Toast } from "../components/atoms/Toast/toast";
+import type { MovieFormValues } from "../components/organisms/MovieForm/movie-form";
+import { MovieForm } from "../components/organisms/MovieForm/movie-form";
 import { useMovie, useUpdateMovie } from "../features/movies/movies.queries";
 import { UpdateMovieSchema } from "../features/movies/movies.schema";
 
@@ -10,6 +12,7 @@ export function EditMovieView() {
 	const { id } = useParams({ strict: false });
 	const { data: movie, isLoading } = useMovie(id);
 	const { mutateAsync: updateMovie } = useUpdateMovie();
+	const [toastVisible, setToastVisible] = useState(false);
 
 	if (isLoading) return <Spinner />;
 	if (!movie || !id) {
@@ -48,16 +51,20 @@ export function EditMovieView() {
 			notes: values.notes.trim() || null,
 		});
 		await updateMovie({ id: movieId, data: payload });
-		navigate({ to: "/movie/$id", params: { id: movieId } });
+		setToastVisible(true);
+		setTimeout(() => setToastVisible(false), 2000);
 	}
 
 	return (
-		<MovieForm
-			title="Edit Movie"
-			submitLabel="Save"
-			initialValues={initialValues}
-			onCancel={() => navigate({ to: "/movie/$id", params: { id: movieId } })}
-			onSubmit={handleSubmit}
-		/>
+		<>
+			<Toast message="Saved!" visible={toastVisible} />
+			<MovieForm
+				title="Edit Movie"
+				submitLabel="Save"
+				initialValues={initialValues}
+				onCancel={() => navigate({ to: "/" })}
+				onSubmit={handleSubmit}
+			/>
+		</>
 	);
 }

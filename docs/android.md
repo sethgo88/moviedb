@@ -97,7 +97,7 @@ See **`docs/patterns.md` → Safe Areas** for the full pattern with code example
 
 ## Back Button (Android)
 
-`src/hooks/useAndroidBackButton.ts` listens for a Tauri event to handle Android back navigation. **TODO (Phase 3):** Verify the exact event name on a real device — it may differ between Tauri versions. If the back button does nothing on device, check the event name in the Tauri Android plugin source.
+`src/hooks/useAndroidBackButton.ts` uses `onBackButtonPress` from `@tauri-apps/api/app` (the correct Tauri 2 API — not a raw event listener). The handler navigates back in router history, or closes the app if already at the root route (`"/"`). Cleanup calls `listener.unregister()`.
 
 ---
 

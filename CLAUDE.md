@@ -154,7 +154,7 @@ Server URL and auth token stored in Tauri's secure store — never hardcoded, ne
 - Android manifest permissions needed: `INTERNET`, `ACCESS_NETWORK_STATE`
 - Current Tauri capabilities: `core:default`, `opener:default`, `sql:default`, `sql:allow-execute`, `dialog:allow-open`, `fs:allow-read-file`
 - Physical device strongly preferred over emulator for WebView perf testing
-- **Phase 3 TODO:** Verify that the Tauri 2 Android back button fires as `"back_button"` event (see `src/hooks/useAndroidBackButton.ts`). Adjust event name if needed.
+- **Back button:** Uses `onBackButtonPress` from `@tauri-apps/api/app` (returns `PluginListener`). Navigates back or closes the app from root. See `src/hooks/useAndroidBackButton.ts`.
 - Debug keystore auto-generated at `~/.android/debug.keystore`
 - Release keystore: stored outside project, credentials in `.env`, never committed
 
@@ -197,7 +197,7 @@ The `docs/` folder contains the developer-facing documentation for this project.
 - [x] Phase 5: PocketBase Client & Sync Layer
 - [x] Phase 6: Router + Collection View + NavBar
 - [x] Phase 7: Add Movie (manual entry — poster picker, form validation, all fields)
-- [ ] Phase 3: Android Target Configuration (deferred — verify back_button event name)
+- [x] Phase 3: Android Target Configuration (back button uses onBackButtonPress from @tauri-apps/api/app)
 - [x] Phase 8: Movie Detail + Edit Movie
 - [x] Phase 9: TMDB Integration (search + auto-fill Add Movie form)
 - [ ] Phase 10: Settings + Sync UI

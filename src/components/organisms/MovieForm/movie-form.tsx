@@ -1,7 +1,7 @@
 import { useForm } from "@tanstack/react-form";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { Search } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import {
 	useMovie,
@@ -12,6 +12,10 @@ import type {
 	MovieStatus,
 } from "../../../features/movies/movies.types";
 import type { TmdbSearchResult } from "../../../features/tmdb/tmdb.types";
+import {
+	registerBackInterceptor,
+	unregisterBackInterceptor,
+} from "../../../lib/back-interceptor";
 import { PosterPicker } from "../../atoms/PosterPicker/poster-picker";
 import { Select } from "../../atoms/Select/select";
 import { Slider } from "../../atoms/Slider/slider";
@@ -103,6 +107,19 @@ export function MovieForm({
 		message: string;
 		variant: "success" | "error";
 	} | null>(null);
+
+	// Register a hardware back-button interceptor for the Android back gesture.
+	// Reads form.state.isDirty at call-time so no reactive dependency is needed.
+	useEffect(() => {
+		registerBackInterceptor(() => {
+			if (form.state.isDirty) {
+				setShowDiscard(true);
+				return true;
+			}
+			return false;
+		});
+		return () => unregisterBackInterceptor();
+	}, [form]);
 
 	if (submitLabel === "Save") {
 		if (isLoading) return <Spinner />;

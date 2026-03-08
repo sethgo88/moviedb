@@ -9,7 +9,15 @@ function RootLayout() {
 
 	return (
 		<QueryClientProvider client={queryClient}>
-			<Outlet />
+			<div
+				className="flex h-screen flex-col"
+				style={{
+					paddingTop: "env(safe-area-inset-top)",
+					paddingBottom: "env(safe-area-inset-bottom)",
+				}}
+			>
+				<Outlet />
+			</div>
 		</QueryClientProvider>
 	);
 }

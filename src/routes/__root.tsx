@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRootRoute, Outlet } from "@tanstack/react-router";
+import { NavBar } from "../components/organisms/NavBar";
 import { useAndroidBackButton } from "../hooks/useAndroidBackButton";
 
 const queryClient = new QueryClient();
@@ -11,12 +12,12 @@ function RootLayout() {
 		<QueryClientProvider client={queryClient}>
 			<div
 				className="flex h-screen flex-col"
-				style={{
-					paddingTop: "env(safe-area-inset-top)",
-					paddingBottom: "env(safe-area-inset-bottom)",
-				}}
+				style={{ paddingTop: "env(safe-area-inset-top)" }}
 			>
-				<Outlet />
+				<div className="flex-1 overflow-hidden">
+					<Outlet />
+				</div>
+				<NavBar />
 			</div>
 		</QueryClientProvider>
 	);

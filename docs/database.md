@@ -17,17 +17,17 @@ All reads come from SQLite. PocketBase is only touched during sync.
 ```sql
 CREATE TABLE IF NOT EXISTS movies (
     id           TEXT PRIMARY KEY,          -- UUID via crypto.randomUUID()
-    tmdb_id      INTEGER NOT NULL,          -- TMDB movie ID (not unique — one per copy)
+    tmdb_id      INTEGER,                   -- nullable — manual entries have no TMDB id
     title        TEXT NOT NULL,
-    year         INTEGER NOT NULL,
-    poster_url   TEXT,                      -- TMDB w185 URL
+    year         INTEGER,                   -- nullable — can be unknown at entry time
+    poster_url   TEXT,                      -- local file path or TMDB w185 URL
     tmdb_rating  REAL,
-    personal_rating INTEGER,               -- 1–10, nullable
+    personal_rating REAL,                  -- 1–10 in 0.5 steps, nullable (REAL since migration v2)
     status       TEXT NOT NULL,            -- 'OWNED' | 'WANTED'
-    format       TEXT NOT NULL,            -- 'HD' | '4K'
+    format       TEXT NOT NULL,            -- 'SD' | 'HD' | '4K' | 'CUSTOM'
     is_physical  INTEGER NOT NULL DEFAULT 0,  -- 0/1 boolean
     is_digital   INTEGER NOT NULL DEFAULT 0,
-    is_backed_up INTEGER NOT NULL DEFAULT 0,
+    is_backed_up INTEGER NOT NULL DEFAULT 0,  -- stored but not shown in UI
     notes        TEXT,
     deleted_at   TEXT,                     -- null = active, ISO 8601 = soft-deleted
     created_at   TEXT NOT NULL,            -- ISO 8601
@@ -84,12 +84,21 @@ let migrations = vec![
     tauri_plugin_sql::Migration {
         version: 1,
         description: "create_initial_tables",
+        sql: "CREATE TABLE movies ( ... ); ...",
+        kind: tauri_plugin_sql::MigrationKind::Up,
+    },
+    tauri_plugin_sql::Migration {
+        version: 2,
+        description: "personal_rating_real",
         sql: "
-            CREATE TABLE movies ( ... );
+            -- Recreate movies with personal_rating REAL instead of INTEGER
+            -- (SQLite doesn't support ALTER COLUMN, so table recreation is required)
+            CREATE TABLE movies_new ( ... personal_rating REAL ... );
+            INSERT INTO movies_new SELECT * FROM movies;
+            DROP TABLE movies;
+            ALTER TABLE movies_new RENAME TO movies;
             CREATE INDEX idx_movies_tmdb_id ON movies (tmdb_id);
             CREATE TRIGGER movies_updated_at ...;
-            CREATE TABLE sync_meta ( ... );
-            INSERT INTO sync_meta (last_synced_at) VALUES (NULL);
         ",
         kind: tauri_plugin_sql::MigrationKind::Up,
     },
@@ -164,18 +173,18 @@ Pending soft deletes exist?
 
 ## Poster Cache
 
-Posters are fetched from TMDB and stored locally using Rust Tauri commands:
+Posters are stored in `{appDataDir}/poster-cache/` at w185 size (~35KB each). Two flows:
 
+### Custom posters (manual entry — implemented)
+`PosterPicker` atom → user picks image → Canvas resize to 185px wide → JPEG encode → `save_custom_poster` Tauri command → `poster-cache/custom_{uuid}_w185.jpg`. Path stored in `poster_url`. Displayed via `convertFileSrc(poster_url)`.
+
+### TMDB posters (Phase 9 — not yet implemented)
 | Command | Description |
 |---|---|
-| `cache_poster(tmdbId, url)` | Fetch w185 URL, write to `{appDataDir}/poster-cache/{tmdbId}_w185.jpg` |
-| `get_cached_poster(tmdbId)` | Return local file path if it exists and is < 30 days old, else `null` |
+| `save_custom_poster(base64_data)` | Saves pre-resized JPEG from JS, returns absolute path |
+| `cache_poster(tmdbId, url)` | Fetch TMDB w185 URL, write to `poster-cache/{tmdbId}_w185.jpg` |
+| `get_cached_poster(tmdbId)` | Return local path if < 30 days old, else `null` |
 | `clear_poster_cache()` | Delete all files in `poster-cache/` |
 | `get_poster_cache_size()` | Return total bytes |
 
-Cache limits:
-- **Max size:** 100MB — LRU eviction when exceeded
-- **TTL:** 30 days per file — re-fetched on next access if stale
-- **Size per image:** ~35KB average at w185
-
-The `Poster` atom resolves in order: local cache → TMDB URL → placeholder icon.
+Cache limits (Phase 9): 100MB max, 30-day TTL per file, LRU eviction.

@@ -59,15 +59,30 @@ React-free singletons and utilities:
 
 ### `src-tauri/src/`
 Rust backend. Currently handles:
-- SQLite plugin registration and migrations
-- Poster cache Tauri commands (`cache_poster`, `get_cached_poster`, etc.)
+- SQLite plugin registration and migrations (v1: initial schema, v2: personal_rating REAL)
+- `save_custom_poster` — decodes base64 JPEG and saves to poster-cache directory
+- `cache_poster(tmdb_id, url)` — fetches TMDB poster via reqwest, saves to poster-cache, returns data URL
+- `get_cached_poster(tmdb_id)` — returns cached poster as data URL or null
+- `clear_poster_cache()` — deletes all files in poster-cache/ (used by Settings)
+- `get_poster_cache_size()` — returns total cache size in bytes (used by Settings)
 
-## Data Flow: Adding a Movie
+### Key organisms
+- `MovieForm` — shared form used by both `AddMovieView` and `EditMovieView`. Owns TanStack Form state, accepts `initialValues` + `onSubmit` + `onCancel` props.
+- `MovieCard` — collection list row (navigates to detail on tap)
+- `NavBar` — bottom tab bar (dynamic from NAV_ITEMS array)
+
+### Key molecules
+- `ConfirmSheet` — dark bottom sheet for destructive confirmations. Props: `isOpen`, `title`, `message`, `confirmLabel`, `isDangerous`, `onConfirm`, `onCancel`.
+
+## Data Flow: Adding a Movie (manual entry)
 
 ```
-User fills MovieForm
+User fills AddMovieView form (TanStack Form)
         ↓
-useMutation (movies.queries.ts)
+[Optional] PosterPicker: pick image → Canvas resize 185px wide
+        → invoke save_custom_poster → poster-cache/custom_{uuid}_w185.jpg
+        ↓
+form.handleSubmit() → NewMovieSchema.parse() → useCreateMovie mutation
         ↓
 movies.service.createMovie()   →   db.ts   →   SQLite
         ↓
@@ -75,10 +90,29 @@ onSuccess: invalidateQueries(['movies'])
         ↓
 useMovies() re-fetches, CollectionView re-renders
         ↓
-cache_poster Tauri command fires (async, non-blocking)
-        ↓
-If online: sync.service.runSync() fires
+[Phase 10] If online: sync.service.runSync() fires
 ```
+
+## Data Flow: Adding a Movie (with TMDB)
+
+```
+User taps Search icon in MovieForm header → TmdbSearch sheet opens
+        ↓
+useTmdbSearch (debounced 400ms) → TMDB /search/movie API
+        ↓
+User selects result → form fields pre-filled:
+  title, year, tmdb_id, tmdb_rating, poster_url (TMDB HTTPS URL)
+        ↓
+(same as manual entry from here)
+```
+
+**Poster storage:** TMDB posters are stored as direct HTTPS URLs
+(`https://image.tmdb.org/t/p/w185/...`). The WebView loads them as `<img src>`
+just like any other network image. Phase 9 (deferred) will add `cache_poster`
+Rust command to download via reqwest (no CORS) and save locally.
+
+**Custom posters** (file picker) are stored as JPEG data URLs (base64-embedded)
+because Tauri's asset protocol cannot serve runtime-written files on Android.
 
 ## Data Flow: Sync
 

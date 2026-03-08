@@ -6,12 +6,12 @@ export const MovieFormatSchema = z.enum(["SD", "HD", "4K", "CUSTOM"]);
 
 export const MovieSchema = z.object({
 	id: z.string().uuid(),
-	tmdb_id: z.number().int(),
+	tmdb_id: z.number().int().nullable(),
 	title: z.string().min(1),
 	year: z.number().int().nullable(),
 	poster_url: z.string().nullable(),
 	tmdb_rating: z.number().nullable(),
-	personal_rating: z.number().int().min(1).max(10).nullable(),
+	personal_rating: z.number().min(1).max(10).nullable(),
 	status: MovieStatusSchema,
 	format: MovieFormatSchema,
 	is_physical: z.number().int().min(0).max(1),
@@ -29,7 +29,7 @@ export const NewMovieSchema = MovieSchema.omit({
 	updated_at: true,
 	deleted_at: true,
 }).extend({
-	personal_rating: z.number().int().min(1).max(10).nullable().optional(),
+	personal_rating: z.number().min(1).max(10).nullable().optional(),
 	notes: z.string().nullable().optional(),
 });
 

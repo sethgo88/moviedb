@@ -13,7 +13,7 @@ Each technology in the project — why it was chosen and what you need to know t
 - The frontend is a standard web app (Vite + React) running in the system WebView
 - The Rust backend exposes typed **commands** that the frontend calls via `invoke()`
 - **Capabilities** (`src-tauri/capabilities/`) declare what APIs the app can use — network, file system, etc. Missing capability = silent failure
-- Plugins extend Tauri with functionality: `tauri-plugin-sql` for SQLite, `tauri-plugin-http` for image fetching
+- Plugins extend Tauri with functionality: `tauri-plugin-sql` for SQLite, `tauri-plugin-dialog` for file pickers, `tauri-plugin-fs` for file reading (handles Android content URIs)
 
 **In this project:**
 - `src-tauri/src/lib.rs` — plugin registration, migration definitions
@@ -111,6 +111,51 @@ export function useCreateMovie() {
 - Invalidate the relevant query key in `onSuccess` after mutations
 - Never call service functions directly in components — always go through a query/mutation hook
 - Query hooks live in `*.queries.ts` files, not inside components
+
+---
+
+## TanStack Form
+
+**What:** Headless, type-safe form state manager for React.
+**Why:** Handles field-level validation, async submission state, and dirty tracking without coupling to any specific validation library.
+
+**Important:** Do NOT install `@tanstack/zod-form-adapter` — it requires zod@^3.x and this project uses zod v4. Use Zod's `.safeParse()` directly in field `validators` instead:
+
+```ts
+import { useForm } from "@tanstack/react-form";
+import { z } from "zod";
+
+const form = useForm({
+  defaultValues: { title: "" },
+  onSubmit: async ({ value }) => { /* ... */ },
+});
+
+// In JSX:
+<form.Field
+  name="title"
+  validators={{
+    onBlur: ({ value }) => {
+      const result = z.string().min(1, "Required").safeParse(value);
+      return result.success ? undefined : result.error.issues[0]?.message;
+    },
+  }}
+>
+  {(field) => (
+    <Input
+      value={field.state.value}
+      onChange={(e) => field.handleChange(e.target.value)}
+      onBlur={field.handleBlur}
+      error={field.state.meta.errors[0]?.toString()}
+    />
+  )}
+</form.Field>
+```
+
+**Rules:**
+- All form submission goes through `form.handleSubmit()` — never call the service directly from an `onClick`
+- Use `form.Subscribe` to read `isSubmitting` for button disabled states
+- Validate with `onBlur` (not `onChange`) to avoid premature error messages
+- Use Zod `NewMovieSchema.parse()` inside `onSubmit` as a final safety check before calling the service
 
 ---
 

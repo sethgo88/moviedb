@@ -18,7 +18,7 @@
 			}
 		],
 		"security": {
-			"csp": "default-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.themoviedb.org https://image.tmdb.org; img-src 'self' data: blob: https://image.tmdb.org https://*.supabase.co"
+			"csp": "default-src 'self'; connect-src 'self' https://api.themoviedb.org https://image.tmdb.org http://* https://*; img-src 'self' data: blob: https://asset.localhost https://image.tmdb.org"
 		}
 	},
 	"bundle": {

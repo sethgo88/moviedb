@@ -196,6 +196,15 @@ git pull
 git checkout -b phase/5-pocketbase
 ```
 
+### Development loop (per task)
+
+Every task follows this sequence:
+1. **Plan** — write a plan, get approval before touching code
+2. **Code** — implement the change
+3. **Check** — `pnpm lint && pnpm tsc --noEmit` — fix all errors
+4. **Docs** — update any affected docs (see CLAUDE.md maintenance table)
+5. **Commit** — only after steps 1–4 are done
+
 ### Finishing a phase
 Push the branch and open a PR into `main`. Merge only when lint, typecheck, and a smoke test pass.
 

@@ -19,35 +19,33 @@ Determine level by these rules:
 Create a folder: `src/components/<level>/<ComponentName>/`
 
 Files inside:
-- `index.ts` — re-exports the component: `export { ComponentName } from './ComponentName'`
-- `<ComponentName>.tsx` — the component
-
-Optionally add:
-- `<ComponentName>.test.tsx` — if the user asks for a test, or if the component has non-trivial logic
+- `index.tsx` — implementation file (export the component directly from here — no separate barrel)
+- `<ComponentName>.test.tsx` — optional, add only if the user asks or if logic is non-trivial
 
 ## Component template
 
 ```tsx
-import type { FC } from 'react'
+import { cn } from "../../../lib/cn";
 
 interface <ComponentName>Props {
   // props here
+  className?: string;
 }
 
-export const <ComponentName>: FC<<ComponentName>Props> = ({ ... }) => {
+export function <ComponentName>({ className, ...props }: <ComponentName>Props) {
   return (
-    <div>
+    <div className={cn("...", className)}>
       {/* ... */}
     </div>
-  )
+  );
 }
 ```
 
 ## Rules
 - Tailwind only — no inline styles, no CSS modules
-- Use `dark:` variants for all color classes — dark mode is required throughout
+- App is dark-only — write dark styles as the base, no `dark:` variants needed
 - Touch targets minimum 48x48 logical pixels for all interactive elements (Android guideline)
 - No data fetching inside atoms or molecules — pass data as props
 - Organisms may use TanStack Query hooks or Zustand store selectors
 - Views (in `src/views/`) are the only place that should compose organisms with real page-level data
-- Export everything through the `index.ts` barrel — consumers import from the folder, not the file
+- Implementation goes directly in `index.tsx` — no separate barrel file

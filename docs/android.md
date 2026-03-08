@@ -82,18 +82,40 @@ In `src-tauri/gen/android/app/src/main/AndroidManifest.xml`:
 `INTERNET` — required for PocketBase sync and TMDB API calls.
 `ACCESS_NETWORK_STATE` — used by `isOnline()` in the sync service.
 
+**Note:** `tauri-plugin-dialog` handles gallery/media access on Android via the system file picker — no additional `READ_MEDIA_IMAGES` manifest permission is needed because the picker uses Android's built-in content URI system.
+
+## Safe Areas
+
+The app runs edge-to-edge. All UI must respect device safe areas — the camera cutout at the top and the gesture navigation bar at the bottom.
+
+- Use `env(safe-area-inset-top)` for top-anchored elements (headers, toasts, fixed overlays).
+- Use `env(safe-area-inset-bottom) + 15px` for bottom-anchored elements (nav bar, sheets, fixed buttons).
+
+See **`docs/patterns.md` → Safe Areas** for the full pattern with code examples.
+
+---
+
+## Back Button (Android)
+
+`src/hooks/useAndroidBackButton.ts` uses `onBackButtonPress` from `@tauri-apps/api/app` (the correct Tauri 2 API — not a raw event listener). The handler navigates back in router history, or closes the app if already at the root route (`"/"`). Cleanup calls `listener.unregister()`.
+
 ---
 
 ## Tauri 2 Capabilities
 
-Network access must also be declared in the Tauri capabilities system (separate from Android permissions):
+Declared in `src-tauri/capabilities/default.json`. If an API call silently fails, check here first.
 
-```
-src-tauri/capabilities/
-  default.json     ← declare allowed APIs here
+Current permissions:
+```json
+"core:default"        — invoke, window, app APIs
+"opener:default"      — open URLs/files
+"sql:default"         — SQLite plugin base
+"sql:allow-execute"   — run SQL statements
+"dialog:allow-open"   — file picker (used by PosterPicker)
+"fs:allow-read-file"  — read picked files / Android content URIs
 ```
 
-If API calls silently fail (no error, no result), the capabilities file is the first place to check.
+When adding a new Tauri plugin, add its permission identifier here and update `lib.rs` with `.plugin(tauri_plugin_xxx::init())`.
 
 ---
 

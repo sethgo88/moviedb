@@ -65,6 +65,17 @@ export function MovieCard({ movie }: MovieCardProps) {
 							</span>
 						</div>
 					)}
+					{movie.tmdb_rating !== null && (
+						<div className="flex items-center gap-1">
+							<span className="text-xs text-white/40">TMDB</span>
+							<span className="text-xs text-white/50">
+								★{" "}
+								{movie.tmdb_rating % 1 === 0
+									? movie.tmdb_rating
+									: movie.tmdb_rating.toFixed(1)}
+							</span>
+						</div>
+					)}
 					<div className="flex gap-2">
 						{movie.is_physical === 1 && <Disc3 size={16} />}
 						{movie.is_digital === 1 && <TvMinimalPlay size={16} />}

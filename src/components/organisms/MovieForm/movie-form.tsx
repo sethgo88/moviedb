@@ -1,5 +1,6 @@
 import { useForm } from "@tanstack/react-form";
 import { useNavigate, useParams } from "@tanstack/react-router";
+import { Search } from "lucide-react";
 import { useState } from "react";
 import { z } from "zod";
 import {
@@ -10,13 +11,16 @@ import type {
 	MovieFormat,
 	MovieStatus,
 } from "../../../features/movies/movies.types";
+import type { TmdbSearchResult } from "../../../features/tmdb/tmdb.types";
 import { PosterPicker } from "../../atoms/PosterPicker/poster-picker";
 import { Select } from "../../atoms/Select/select";
 import { Slider } from "../../atoms/Slider/slider";
 import { Spinner } from "../../atoms/Spinner/spinner";
+import { Toast } from "../../atoms/Toast/toast";
 import { Toggle } from "../../atoms/Toggle/toggle";
 import { ConfirmSheet } from "../../molecules/ConfirmSheet/confirm-sheet";
 import { FormField } from "../../molecules/FormField/form-field";
+import { TmdbSearch } from "../../molecules/TmdbSearch/tmdb-search";
 import { ToggleGroup } from "../../molecules/ToggleGroup/toggle-group";
 
 const STATUS_OPTIONS: { label: string; value: MovieStatus }[] = [
@@ -47,6 +51,8 @@ export interface MovieFormValues {
 	personal_rating: number | null;
 	notes: string;
 	poster_url: string | null;
+	tmdb_id: number | null;
+	tmdb_rating: number | null;
 }
 
 interface MovieFormProps {
@@ -67,6 +73,8 @@ const DEFAULTS: MovieFormValues = {
 	personal_rating: null,
 	notes: "",
 	poster_url: null,
+	tmdb_id: null,
+	tmdb_rating: null,
 };
 
 export function MovieForm({
@@ -90,6 +98,11 @@ export function MovieForm({
 	const { mutate: softDelete, isPending: isDeleting } = useSoftDeleteMovie();
 	const [showDelete, setShowDelete] = useState(false);
 	const [showDiscard, setShowDiscard] = useState(false);
+	const [showTmdbSearch, setShowTmdbSearch] = useState(false);
+	const [tmdbToast, setTmdbToast] = useState<{
+		message: string;
+		variant: "success" | "error";
+	} | null>(null);
 
 	if (submitLabel === "Save") {
 		if (isLoading) return <Spinner />;
@@ -109,6 +122,24 @@ export function MovieForm({
 		});
 	}
 
+	function handleTmdbSelect(result: TmdbSearchResult, url: string | null) {
+		form.setFieldValue("title", result.title);
+		if (result.release_date) {
+			form.setFieldValue("year", result.release_date.slice(0, 4));
+		}
+		form.setFieldValue("tmdb_id", result.id);
+		form.setFieldValue(
+			"tmdb_rating",
+			result.vote_average > 0 ? result.vote_average : null,
+		);
+		if (url) {
+			form.setFieldValue("poster_url", url);
+		}
+		setShowTmdbSearch(false);
+		setTmdbToast({ message: "TMDB data applied", variant: "success" });
+		setTimeout(() => setTmdbToast(null), 3000);
+	}
+
 	return (
 		<div className="flex h-full flex-col bg-gray-950 text-white">
 			{/* Header */}
@@ -125,6 +156,14 @@ export function MovieForm({
 					)}
 				</form.Subscribe>
 				<h1 className="flex-1 text-center text-lg font-semibold">{title}</h1>
+				<button
+					type="button"
+					aria-label="Search TMDB"
+					className="mr-2 text-white/50"
+					onClick={() => setShowTmdbSearch(true)}
+				>
+					<Search size={20} />
+				</button>
 				<form.Subscribe selector={(s) => s.isSubmitting}>
 					{(isSubmitting) => (
 						<button
@@ -278,6 +317,20 @@ export function MovieForm({
 						)}
 					</form.Field>
 
+					{/* TMDB Rating (read-only) */}
+					<form.Subscribe selector={(s) => s.values.tmdb_rating}>
+						{(tmdbRating) =>
+							tmdbRating !== null ? (
+								<FormField label="TMDB Rating">
+									<p className="py-1 text-white/70">
+										★{" "}
+										{tmdbRating % 1 === 0 ? tmdbRating : tmdbRating.toFixed(1)}
+									</p>
+								</FormField>
+							) : null
+						}
+					</form.Subscribe>
+
 					{/* Notes */}
 					<form.Field name="notes">
 						{(field) => (
@@ -321,6 +374,12 @@ export function MovieForm({
 				)}
 			</div>
 
+			<Toast
+				message={tmdbToast?.message ?? ""}
+				visible={tmdbToast !== null}
+				variant={tmdbToast?.variant}
+			/>
+
 			<ConfirmSheet
 				isOpen={showDiscard}
 				title="Discard Changes"
@@ -334,6 +393,12 @@ export function MovieForm({
 					await form.handleSubmit();
 					onCancel();
 				}}
+			/>
+
+			<TmdbSearch
+				isOpen={showTmdbSearch}
+				onClose={() => setShowTmdbSearch(false)}
+				onSelect={handleTmdbSelect}
 			/>
 		</div>
 	);

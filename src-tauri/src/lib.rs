@@ -3,6 +3,88 @@ use tauri::Manager;
 use tauri_plugin_sql::{Migration, MigrationKind};
 use uuid::Uuid;
 
+fn poster_cache_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("poster-cache");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+fn tmdb_poster_filename(tmdb_id: i64) -> String {
+    format!("{}_w185.jpg", tmdb_id)
+}
+
+fn file_to_data_url(path: &std::path::Path) -> Result<String, String> {
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    let b64 = general_purpose::STANDARD.encode(&bytes);
+    Ok(format!("data:image/jpeg;base64,{}", b64))
+}
+
+#[tauri::command]
+async fn cache_poster(
+    app: tauri::AppHandle,
+    tmdb_id: i64,
+    url: String,
+) -> Result<String, String> {
+    let cache_dir = poster_cache_dir(&app)?;
+    let path = cache_dir.join(tmdb_poster_filename(tmdb_id));
+
+    // Return cached version immediately if it exists
+    if path.exists() {
+        return file_to_data_url(&path);
+    }
+
+    let bytes = reqwest::get(&url)
+        .await
+        .map_err(|e| e.to_string())?
+        .error_for_status()
+        .map_err(|e| e.to_string())?
+        .bytes()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+
+    let b64 = general_purpose::STANDARD.encode(&bytes);
+    Ok(format!("data:image/jpeg;base64,{}", b64))
+}
+
+#[tauri::command]
+fn get_cached_poster(app: tauri::AppHandle, tmdb_id: i64) -> Result<Option<String>, String> {
+    let cache_dir = poster_cache_dir(&app)?;
+    let path = cache_dir.join(tmdb_poster_filename(tmdb_id));
+    if path.exists() {
+        Ok(Some(file_to_data_url(&path)?))
+    } else {
+        Ok(None)
+    }
+}
+
+#[tauri::command]
+fn clear_poster_cache(app: tauri::AppHandle) -> Result<(), String> {
+    let cache_dir = poster_cache_dir(&app)?;
+    for entry in std::fs::read_dir(&cache_dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        std::fs::remove_file(entry.path()).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn get_poster_cache_size(app: tauri::AppHandle) -> Result<i64, String> {
+    let cache_dir = poster_cache_dir(&app)?;
+    let total = std::fs::read_dir(&cache_dir)
+        .map_err(|e| e.to_string())?
+        .filter_map(|e| e.ok())
+        .filter_map(|e| e.metadata().ok())
+        .map(|m| m.len())
+        .sum::<u64>();
+    Ok(total as i64)
+}
+
 /// Resize a picked image (already encoded as JPEG on the JS side) and
 /// persist it to the poster-cache directory.  The JS side does the canvas
 /// resize so all we receive here is the final JPEG bytes as base64.
@@ -124,7 +206,13 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .invoke_handler(tauri::generate_handler![save_custom_poster])
+        .invoke_handler(tauri::generate_handler![
+            save_custom_poster,
+            cache_poster,
+            get_cached_poster,
+            clear_poster_cache,
+            get_poster_cache_size,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

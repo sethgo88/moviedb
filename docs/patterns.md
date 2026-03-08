@@ -355,6 +355,21 @@ export async function getCachedPoster(tmdbId: number): Promise<string | null> {
 
 ---
 
+## Poster URL Storage
+
+Two poster storage strategies are used depending on source:
+
+| Source | Storage format | Reason |
+|---|---|---|
+| Custom (file picker) | JPEG data URL (`data:image/jpeg;base64,...`) | Tauri asset protocol cannot serve runtime-written files on Android |
+| TMDB | HTTPS URL (`https://image.tmdb.org/t/p/w185/...`) | Direct URL works as `<img src>` in the WebView |
+
+**Do not** attempt to `fetch()` TMDB image URLs from the WebView — `image.tmdb.org` does not send CORS headers for requests originating from the Tauri WebView origin, causing "Failed to fetch". The direct URL approach matches how thumbnails already work in search results.
+
+**Phase 9** will add a `cache_poster` Rust command (reqwest, no CORS) to download and store TMDB posters locally for offline display.
+
+---
+
 ## TanStack Form Pattern
 
 See `src/views/AddMovieView.tsx` for a full working example. Key points:

@@ -61,7 +61,10 @@ React-free singletons and utilities:
 Rust backend. Currently handles:
 - SQLite plugin registration and migrations (v1: initial schema, v2: personal_rating REAL)
 - `save_custom_poster` — decodes base64 JPEG and saves to poster-cache directory
-- Phase 9: TMDB poster cache commands (`cache_poster`, `get_cached_poster`, etc.)
+- `cache_poster(tmdb_id, url)` — fetches TMDB poster via reqwest, saves to poster-cache, returns data URL
+- `get_cached_poster(tmdb_id)` — returns cached poster as data URL or null
+- `clear_poster_cache()` — deletes all files in poster-cache/ (used by Settings)
+- `get_poster_cache_size()` — returns total cache size in bytes (used by Settings)
 
 ### Key organisms
 - `MovieForm` — shared form used by both `AddMovieView` and `EditMovieView`. Owns TanStack Form state, accepts `initialValues` + `onSubmit` + `onCancel` props.
@@ -90,15 +93,26 @@ useMovies() re-fetches, CollectionView re-renders
 [Phase 10] If online: sync.service.runSync() fires
 ```
 
-## Data Flow: Adding a Movie (with TMDB — Phase 9)
+## Data Flow: Adding a Movie (with TMDB)
 
 ```
-User searches TMDB → selects result → form pre-filled with metadata
+User taps Search icon in MovieForm header → TmdbSearch sheet opens
         ↓
-cache_poster Tauri command fires → poster-cache/{tmdb_id}_w185.jpg
+useTmdbSearch (debounced 400ms) → TMDB /search/movie API
+        ↓
+User selects result → form fields pre-filled:
+  title, year, tmdb_id, tmdb_rating, poster_url (TMDB HTTPS URL)
         ↓
 (same as manual entry from here)
 ```
+
+**Poster storage:** TMDB posters are stored as direct HTTPS URLs
+(`https://image.tmdb.org/t/p/w185/...`). The WebView loads them as `<img src>`
+just like any other network image. Phase 9 (deferred) will add `cache_poster`
+Rust command to download via reqwest (no CORS) and save locally.
+
+**Custom posters** (file picker) are stored as JPEG data URLs (base64-embedded)
+because Tauri's asset protocol cannot serve runtime-written files on Android.
 
 ## Data Flow: Sync
 

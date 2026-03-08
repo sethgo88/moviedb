@@ -12,9 +12,9 @@ export function AddMovieView() {
 		const payload = NewMovieSchema.parse({
 			title: values.title.trim(),
 			year: Number(values.year),
-			tmdb_id: null,
+			tmdb_id: values.tmdb_id,
 			poster_url: values.poster_url,
-			tmdb_rating: null,
+			tmdb_rating: values.tmdb_rating,
 			personal_rating: values.personal_rating,
 			status: values.status,
 			format: values.format,

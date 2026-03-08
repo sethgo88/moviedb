@@ -36,6 +36,8 @@ export function EditMovieView() {
 		personal_rating: movie.personal_rating,
 		notes: movie.notes ?? "",
 		poster_url: movie.poster_url,
+		tmdb_id: movie.tmdb_id,
+		tmdb_rating: movie.tmdb_rating,
 	};
 
 	async function handleSubmit(values: MovieFormValues) {
@@ -47,6 +49,8 @@ export function EditMovieView() {
 			is_physical: values.is_physical ? 1 : 0,
 			is_digital: values.is_digital ? 1 : 0,
 			poster_url: values.poster_url,
+			tmdb_id: values.tmdb_id,
+			tmdb_rating: values.tmdb_rating,
 			personal_rating: values.personal_rating,
 			notes: values.notes.trim() || null,
 		});

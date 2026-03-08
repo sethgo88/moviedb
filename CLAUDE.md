@@ -14,6 +14,10 @@ Every task follows this sequence — no skipping steps:
 
 5. **Commit.** Only after steps 1–4 are complete.
 
+## Edit Tool Rule
+
+**Always Read a file immediately before calling Edit.** Never construct `old_string` from memory or a prior read. Biome reformats files after `pnpm format`, invalidating any earlier read. If Edit fails with "file modified since read", re-read the file and retry — do not fall back to `sed` or Python scripts.
+
 ## Git Branching Strategy
 - `main` is always stable — never commit directly to it
 - Branch per phase: `phase/4-sqlite`, `phase/5-pocketbase`, `phase/6-sync`, etc.
@@ -156,10 +160,10 @@ Server URL and auth token stored in Tauri's secure store — never hardcoded, ne
 | Command | Status | Description |
 |---|---|---|
 | `save_custom_poster(base64_data)` | ✅ Implemented | Decodes base64 JPEG, saves to `poster-cache/custom_{uuid}_w185.jpg`, returns path |
-| `cache_poster(tmdb_id, url)` | 🔲 Phase 9 | Fetch TMDB w185 URL, write to `poster-cache/{tmdb_id}_w185.jpg`, return path |
-| `get_cached_poster(tmdb_id)` | 🔲 Phase 9 | Check local cache, return path or null |
-| `clear_poster_cache()` | 🔲 Phase 9 | Delete all files in poster-cache/ |
-| `get_poster_cache_size()` | 🔲 Phase 9 | Return total bytes for settings display |
+| `cache_poster(tmdb_id, url)` | ✅ Implemented | Fetch via reqwest, save to `poster-cache/{tmdb_id}_w185.jpg`, return data URL |
+| `get_cached_poster(tmdb_id)` | ✅ Implemented | Check local cache, return data URL or null |
+| `clear_poster_cache()` | ✅ Implemented | Delete all files in poster-cache/ |
+| `get_poster_cache_size()` | ✅ Implemented | Return total bytes for settings display |
 
 ## Documentation Maintenance
 
@@ -193,6 +197,6 @@ The `docs/` folder contains the developer-facing documentation for this project.
 - [x] Phase 7: Add Movie (manual entry — poster picker, form validation, all fields)
 - [ ] Phase 3: Android Target Configuration (deferred — verify back_button event name)
 - [x] Phase 8: Movie Detail + Edit Movie
-- [ ] Phase 9: TMDB Integration (search + auto-fill Add Movie form)
+- [x] Phase 9: TMDB Integration (search + auto-fill Add Movie form)
 - [ ] Phase 10: Settings + Sync UI
 - [ ] Phase 11: Polish & QA

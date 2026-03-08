@@ -20,10 +20,12 @@ Every task follows this sequence — no skipping steps:
 
 ## Git Branching Strategy
 - `main` is always stable — never commit directly to it
+- **Create a new branch before writing any code for a new phase or feature.** Never commit phase work to a previous phase's branch.
 - Branch per phase: `phase/4-sqlite`, `phase/5-pocketbase`, `phase/6-sync`, etc.
 - Branch per feature within a phase if the change is self-contained
 - Merge to `main` via PR when a phase is complete and stable
 - Branch naming: `phase/<n>-<short-description>` for phases, `feat/<short-description>` for features, `fix/<short-description>` for bug fixes
+- Check `git branch --show-current` at the start of every session to confirm you are on the right branch before making any changes.
 
 ## Project Overview
 Tauri 2 + React + TypeScript Android app for tracking a personal movie collection.

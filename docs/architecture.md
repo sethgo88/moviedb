@@ -59,15 +59,27 @@ React-free singletons and utilities:
 
 ### `src-tauri/src/`
 Rust backend. Currently handles:
-- SQLite plugin registration and migrations
-- Poster cache Tauri commands (`cache_poster`, `get_cached_poster`, etc.)
+- SQLite plugin registration and migrations (v1: initial schema, v2: personal_rating REAL)
+- `save_custom_poster` — decodes base64 JPEG and saves to poster-cache directory
+- Phase 9: TMDB poster cache commands (`cache_poster`, `get_cached_poster`, etc.)
 
-## Data Flow: Adding a Movie
+### Key organisms
+- `MovieForm` — shared form used by both `AddMovieView` and `EditMovieView`. Owns TanStack Form state, accepts `initialValues` + `onSubmit` + `onCancel` props.
+- `MovieCard` — collection list row (navigates to detail on tap)
+- `NavBar` — bottom tab bar (dynamic from NAV_ITEMS array)
+
+### Key molecules
+- `ConfirmSheet` — dark bottom sheet for destructive confirmations. Props: `isOpen`, `title`, `message`, `confirmLabel`, `isDangerous`, `onConfirm`, `onCancel`.
+
+## Data Flow: Adding a Movie (manual entry)
 
 ```
-User fills MovieForm
+User fills AddMovieView form (TanStack Form)
         ↓
-useMutation (movies.queries.ts)
+[Optional] PosterPicker: pick image → Canvas resize 185px wide
+        → invoke save_custom_poster → poster-cache/custom_{uuid}_w185.jpg
+        ↓
+form.handleSubmit() → NewMovieSchema.parse() → useCreateMovie mutation
         ↓
 movies.service.createMovie()   →   db.ts   →   SQLite
         ↓
@@ -75,9 +87,17 @@ onSuccess: invalidateQueries(['movies'])
         ↓
 useMovies() re-fetches, CollectionView re-renders
         ↓
-cache_poster Tauri command fires (async, non-blocking)
+[Phase 10] If online: sync.service.runSync() fires
+```
+
+## Data Flow: Adding a Movie (with TMDB — Phase 9)
+
+```
+User searches TMDB → selects result → form pre-filled with metadata
         ↓
-If online: sync.service.runSync() fires
+cache_poster Tauri command fires → poster-cache/{tmdb_id}_w185.jpg
+        ↓
+(same as manual entry from here)
 ```
 
 ## Data Flow: Sync

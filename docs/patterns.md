@@ -29,24 +29,20 @@ views      Templates + real data. One per route.
 
 ## File Structure — One Component Per Folder
 
-Every component, even atoms, lives in its own folder:
+Every component, even atoms, lives in its own folder with a single `index.tsx` file:
 
 ```
 src/components/atoms/Button/
-  index.ts          ← re-export barrel
-  Button.tsx        ← implementation
+  index.tsx         ← implementation (export directly, no separate barrel)
   Button.test.tsx   ← optional, co-located
-```
-
-`index.ts` content:
-```ts
-export { Button } from './Button'
 ```
 
 Import consumers use the folder path:
 ```ts
-import { Button } from '@/components/atoms/Button'
+import { Button } from '../components/atoms/Button'
 ```
+
+No path aliases (`@/`) are configured — use relative paths.
 
 ---
 
@@ -191,38 +187,32 @@ export const useMoviesStore = create<MoviesStore>((set) => ({
 import { z } from 'zod'
 
 export const MovieStatusSchema = z.enum(['OWNED', 'WANTED'])
-export const MovieFormatSchema = z.enum(['HD', '4K'])
+export const MovieFormatSchema = z.enum(['SD', 'HD', '4K', 'CUSTOM'])
 
 export const MovieSchema = z.object({
   id: z.string().uuid(),
-  tmdbId: z.number().int(),
+  tmdb_id: z.number().int().nullable(),   // null for manual entries
   title: z.string().min(1),
-  year: z.number().int().min(1888),
-  posterUrl: z.string().url().nullable(),
-  tmdbRating: z.number().nullable(),
-  personalRating: z.number().int().min(1).max(10).nullable(),
+  year: z.number().int().nullable(),
+  poster_url: z.string().nullable(),      // local path or TMDB URL
+  tmdb_rating: z.number().nullable(),
+  personal_rating: z.number().min(1).max(10).nullable(),  // REAL — allows 0.5 steps
   status: MovieStatusSchema,
   format: MovieFormatSchema,
-  isPhysical: z.boolean(),
-  isDigital: z.boolean(),
-  isBackedUp: z.boolean(),
+  is_physical: z.number().int().min(0).max(1),
+  is_digital: z.number().int().min(0).max(1),
+  is_backed_up: z.number().int().min(0).max(1),
   notes: z.string().nullable(),
-  deletedAt: z.string().nullable(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-})
-
-export const CreateMovieSchema = MovieSchema.omit({
-  id: true,
-  deletedAt: true,
-  createdAt: true,
-  updatedAt: true,
+  deleted_at: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
 })
 
 // Infer types from schemas — single source of truth
 export type Movie = z.infer<typeof MovieSchema>
-export type CreateMovie = z.infer<typeof CreateMovieSchema>
 ```
+
+**Note:** Column names use `snake_case` to match SQLite directly — no camelCase mapping layer.
 
 ---
 
@@ -254,16 +244,16 @@ Never omit `WHERE deleted_at IS NULL`. Soft-deleted rows must be invisible to al
 
 ---
 
-## Tailwind Dark Mode Pattern
+## Tailwind — Dark-Only App
 
-Always include both light and dark variants for any color:
+This app is dark mode only. Do not add `dark:` variants — write dark styles as the base:
 
 ```tsx
-// Correct
-<div className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100">
+// Correct — dark-only base styles
+<div className="bg-gray-950 text-white">
 
-// Wrong — no dark variant
-<div className="bg-white text-zinc-900">
+// Wrong — unnecessary dark: variants
+<div className="bg-white dark:bg-gray-950 text-black dark:text-white">
 ```
 
 ---
@@ -312,10 +302,34 @@ Non-critical errors (TMDB unreachable, image load failure) should be handled inl
 ```ts
 import { invoke } from '@tauri-apps/api/core'
 
-// Typed wrapper — always wrap invoke() calls, never use raw invoke in components
+// Preferred: typed wrapper in src/lib/ or src/features/
 export async function getCachedPoster(tmdbId: number): Promise<string | null> {
   return invoke<string | null>('get_cached_poster', { tmdbId })
 }
 ```
 
-Keep all `invoke()` calls in `src/lib/` or `src/features/` — never call `invoke()` directly inside a component.
+**Rule:** Keep `invoke()` calls in `src/lib/` or `src/features/` — not in views or organisms.
+
+**Exception:** Atoms that wrap a single Tauri operation (e.g., `PosterPicker`) may call `invoke()` directly, since they are themselves the typed wrapper for that operation.
+
+---
+
+## TanStack Form Pattern
+
+See `src/views/AddMovieView.tsx` for a full working example. Key points:
+
+```ts
+const form = useForm({
+  defaultValues: { title: "", year: String(currentYear), ... },
+  onSubmit: async ({ value }) => {
+    const payload = SomeSchema.parse({ ...value }); // final Zod parse
+    await mutateAsync(payload);
+    navigate({ to: "/" });
+  },
+});
+```
+
+- Field validators use Zod `.safeParse()` — no zod-form-adapter
+- Use `onBlur` validators to avoid premature error messages
+- Use `form.Subscribe` to read `isSubmitting` for disabling buttons
+- `form.handleSubmit()` can be called from any button (header Save + bottom Submit)

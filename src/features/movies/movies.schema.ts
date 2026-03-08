@@ -7,7 +7,7 @@ export const MovieFormatSchema = z.enum(["SD", "HD", "4K", "CUSTOM"]);
 export const MovieSchema = z.object({
 	id: z.string().uuid(),
 	tmdb_id: z.number().int(),
-	title: z.string(),
+	title: z.string().min(1),
 	year: z.number().int().nullable(),
 	poster_url: z.string().nullable(),
 	tmdb_rating: z.number().nullable(),

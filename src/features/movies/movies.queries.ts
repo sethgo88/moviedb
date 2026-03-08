@@ -21,11 +21,11 @@ export function useMovies() {
 	});
 }
 
-export function useMovie(id: string) {
+export function useMovie(id: string | undefined) {
 	return useQuery({
-		queryKey: movieKeys.detail(id),
-		queryFn: () => getMovieById(id),
-		enabled: !!id,
+		queryKey: movieKeys.detail(id ?? ""),
+		queryFn: () => getMovieById(id ?? ""),
+		enabled: id !== undefined,
 	});
 }
 

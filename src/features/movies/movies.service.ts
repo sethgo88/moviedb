@@ -63,12 +63,32 @@ export async function createMovie(data: NewMovie): Promise<Movie> {
 	return created;
 }
 
+const ALLOWED_UPDATE_COLUMNS = new Set([
+	"tmdb_id",
+	"title",
+	"year",
+	"poster_url",
+	"tmdb_rating",
+	"personal_rating",
+	"status",
+	"format",
+	"is_physical",
+	"is_digital",
+	"is_backed_up",
+	"notes",
+]);
+
 export async function updateMovie(
 	id: string,
 	data: UpdateMovie,
 ): Promise<Movie> {
 	const validated = UpdateMovieSchema.parse(data);
-	const entries = Object.entries(validated).filter(([, v]) => v !== undefined);
+	const entries = Object.entries(validated).filter(([key, v]) => {
+		if (v === undefined) return false;
+		if (!ALLOWED_UPDATE_COLUMNS.has(key))
+			throw new Error(`Attempted to update disallowed column: ${key}`);
+		return true;
+	});
 	if (entries.length === 0) {
 		const existing = await getMovieById(id);
 		if (existing === null) throw new Error(`Movie not found: ${id}`);

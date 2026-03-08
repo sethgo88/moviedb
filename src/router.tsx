@@ -9,6 +9,7 @@ import { AddMovieView } from "./views/AddMovieView";
 import { CollectionView } from "./views/CollectionView";
 import { EditMovieView } from "./views/EditMovieView";
 import { SettingsView } from "./views/SettingsView";
+import { SyncView } from "./views/SyncView";
 
 const indexRoute = createRoute({
 	getParentRoute: () => rootRoute,
@@ -42,12 +43,19 @@ const settingsRoute = createRoute({
 	component: SettingsView,
 });
 
+const syncRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/sync",
+	component: SyncView,
+});
+
 const routeTree = rootRoute.addChildren([
 	indexRoute,
 	addMovieRoute,
 	movieDetailRoute,
 	editMovieRoute,
 	settingsRoute,
+	syncRoute,
 ]);
 
 const memoryHistory = createMemoryHistory({ initialEntries: ["/"] });

@@ -1,11 +1,11 @@
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import type { LucideIcon } from "lucide-react";
-import { Film, Plus, Settings } from "lucide-react";
+import { Film, Plus, RefreshCw, Settings } from "lucide-react";
 import { cn } from "../../../lib/cn";
 
 // Typed to valid top-level nav routes — adding a new tab means adding
 // one entry here. If this grows beyond 4-5, consider a "More" menu.
-type NavRoute = "/" | "/movie/add" | "/settings";
+type NavRoute = "/" | "/movie/add" | "/sync" | "/settings";
 
 interface NavItem {
 	label: string;
@@ -16,6 +16,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
 	{ label: "Collection", icon: Film, to: "/" },
 	{ label: "Add Movie", icon: Plus, to: "/movie/add" },
+	{ label: "Sync", icon: RefreshCw, to: "/sync" },
 	{ label: "Settings", icon: Settings, to: "/settings" },
 ];
 

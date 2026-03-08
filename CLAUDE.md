@@ -200,5 +200,5 @@ The `docs/` folder contains the developer-facing documentation for this project.
 - [x] Phase 3: Android Target Configuration (back button uses onBackButtonPress from @tauri-apps/api/app)
 - [x] Phase 8: Movie Detail + Edit Movie
 - [x] Phase 9: TMDB Integration (search + auto-fill Add Movie form)
-- [ ] Phase 10: Settings + Sync UI
-- [ ] Phase 11: Polish & QA
+- [x] Phase 10: Settings + Sync UI
+- [x] Phase 11: Polish & QA

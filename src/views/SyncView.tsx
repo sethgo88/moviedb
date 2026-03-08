@@ -58,6 +58,7 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
 			await loginPb(email.trim(), password);
 			onSuccess();
 		} catch (e) {
+			console.error("[SyncView] login failed:", e);
 			setError(
 				e instanceof Error
 					? e.message

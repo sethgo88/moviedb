@@ -109,16 +109,13 @@ export function MovieCard({ movie }: MovieCardProps) {
 						src={movie.poster_url}
 						alt=""
 						aria-hidden="true"
-						className="absolute inset-0 h-full w-full object-cover object-center"
+						className="absolute inset-0 h-full w-full object-cover object-center blur-[2px] brightness-75 grayscale-25"
 					/>
 				) : (
 					<div className="absolute inset-0 flex items-center justify-center">
 						<Film size={32} className="text-white/10" />
 					</div>
 				)}
-
-				{/* Overlay */}
-				<div className="absolute inset-0 bg-black/30" />
 
 				{/* Content */}
 				<div className="relative flex w-full gap-3">

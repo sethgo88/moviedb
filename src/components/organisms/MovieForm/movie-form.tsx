@@ -1,7 +1,7 @@
 import { useForm } from "@tanstack/react-form";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useBlocker, useNavigate, useParams } from "@tanstack/react-router";
 import { Search } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { z } from "zod";
 import {
 	useMovie,
@@ -12,10 +12,6 @@ import type {
 	MovieStatus,
 } from "../../../features/movies/movies.types";
 import type { TmdbSearchResult } from "../../../features/tmdb/tmdb.types";
-import {
-	registerBackInterceptor,
-	unregisterBackInterceptor,
-} from "../../../lib/back-interceptor";
 import { PosterPicker } from "../../atoms/PosterPicker/poster-picker";
 import { Select } from "../../atoms/Select/select";
 import { Slider } from "../../atoms/Slider/slider";
@@ -101,25 +97,18 @@ export function MovieForm({
 	const { data: movie, isLoading } = useMovie(id);
 	const { mutate: softDelete, isPending: isDeleting } = useSoftDeleteMovie();
 	const [showDelete, setShowDelete] = useState(false);
-	const [showDiscard, setShowDiscard] = useState(false);
 	const [showTmdbSearch, setShowTmdbSearch] = useState(false);
 	const [tmdbToast, setTmdbToast] = useState<{
 		message: string;
 		variant: "success" | "error";
 	} | null>(null);
 
-	// Register a hardware back-button interceptor for the Android back gesture.
-	// Reads form.state.isDirty at call-time so no reactive dependency is needed.
-	useEffect(() => {
-		registerBackInterceptor(() => {
-			if (form.state.isDirty) {
-				setShowDiscard(true);
-				return true;
-			}
-			return false;
-		});
-		return () => unregisterBackInterceptor();
-	}, [form]);
+	// Router-level blocker — intercepts all navigation (NavBar, back gesture,
+	// programmatic navigate) when the form is dirty.
+	const blocker = useBlocker({
+		shouldBlockFn: () => form.state.isDirty,
+		withResolver: true,
+	});
 
 	if (submitLabel === "Save") {
 		if (isLoading) return <Spinner />;
@@ -161,17 +150,9 @@ export function MovieForm({
 		<div className="flex h-full flex-col bg-gray-950 text-white">
 			{/* Header */}
 			<div className="flex items-center gap-3 border-b border-white/10 p-4">
-				<form.Subscribe selector={(s) => s.isDirty}>
-					{(isDirty) => (
-						<button
-							type="button"
-							className="text-blue-400"
-							onClick={() => (isDirty ? setShowDiscard(true) : onCancel())}
-						>
-							Back
-						</button>
-					)}
-				</form.Subscribe>
+				<button type="button" className="text-blue-400" onClick={onCancel}>
+					Back
+				</button>
 				<h1 className="flex-1 text-center text-lg font-semibold">{title}</h1>
 				<button
 					type="button"
@@ -398,17 +379,17 @@ export function MovieForm({
 			/>
 
 			<ConfirmSheet
-				isOpen={showDiscard}
+				isOpen={blocker.status === "blocked"}
 				title="Discard Changes"
 				message="You have unsaved changes. Discard them?"
 				confirmLabel="Discard"
 				isDangerous
-				onConfirm={onCancel}
-				onCancel={() => setShowDiscard(false)}
+				onConfirm={() => blocker.proceed?.()}
+				onCancel={() => blocker.reset?.()}
 				secondaryLabel="Save & Continue"
 				onSecondary={async () => {
 					await form.handleSubmit();
-					onCancel();
+					blocker.proceed?.();
 				}}
 			/>
 

@@ -84,6 +84,8 @@ In `src-tauri/gen/android/app/src/main/AndroidManifest.xml`:
 
 **Note:** `tauri-plugin-dialog` handles gallery/media access on Android via the system file picker — no additional `READ_MEDIA_IMAGES` manifest permission is needed because the picker uses Android's built-in content URI system.
 
+**Cleartext HTTP:** `AndroidManifest.xml` uses `android:usesCleartextTraffic="${usesCleartextTraffic}"`. This placeholder is set to `true` for both debug and release in `build.gradle.kts`. Required for HTTP (non-HTTPS) connections to self-hosted PocketBase.
+
 ## Safe Areas
 
 The app runs edge-to-edge. All UI must respect device safe areas — the camera cutout at the top and the gesture navigation bar at the bottom.
@@ -201,3 +203,6 @@ Kill and restart `cargo tauri android dev`. This occasionally happens after Rust
 adb logcat -s AndroidRuntime:E
 ```
 Look for the Java exception stack trace. Usually a missing permission or failed plugin initialization.
+
+**Network calls work in dev but fail in release (e.g. PocketBase login)**
+Android blocks cleartext HTTP in release builds by default. Ensure `build.gradle.kts` sets `manifestPlaceholders["usesCleartextTraffic"] = "true"` inside `getByName("release")`. The debug block already sets this — the release block must set it explicitly or it inherits `false` from `defaultConfig`.

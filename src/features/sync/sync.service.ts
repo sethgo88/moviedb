@@ -1,6 +1,7 @@
 import type Database from "@tauri-apps/plugin-sql";
 import { getDb } from "../../lib/db";
 import { getPb } from "../../lib/pocketbase";
+import { cachePosterFromUrl } from "../tmdb/tmdb.service";
 import { PbMovieRecordSchema, SyncResultSchema } from "./sync.schema";
 import { useSyncStore } from "./sync.store";
 import type { SyncResult } from "./sync.types";
@@ -195,6 +196,20 @@ export async function runSync(
 
 				if (pushedLocalIds.has(validated.local_id)) continue;
 
+				// If the remote poster is a TMDB URL, cache it locally via Rust
+				// before inserting so the WebView can display it without CORS issues.
+				let posterUrl = validated.poster_url;
+				if (
+					posterUrl?.startsWith("https://image.tmdb.org") &&
+					validated.tmdb_id
+				) {
+					try {
+						posterUrl = await cachePosterFromUrl(validated.tmdb_id, posterUrl);
+					} catch {
+						// keep the TMDB URL if caching fails — better than losing it
+					}
+				}
+
 				// INSERT OR REPLACE bypasses the updated_at trigger so we
 				// preserve the remote timestamp exactly as received.
 				// COALESCE for poster_url: if remote is null (custom poster was
@@ -214,7 +229,7 @@ export async function runSync(
 						validated.tmdb_id,
 						validated.title,
 						validated.year,
-						validated.poster_url,
+						posterUrl,
 						validated.tmdb_rating,
 						validated.personal_rating,
 						validated.status,

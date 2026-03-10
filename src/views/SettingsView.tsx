@@ -5,6 +5,7 @@ import { ConfirmSheet } from "../components/molecules/ConfirmSheet/confirm-sheet
 import {
 	clearPosterCache,
 	getPosterCacheSize,
+	refreshUncachedPosters,
 } from "../features/tmdb/tmdb.service";
 import { configurePb, POCKETBASE_URL_KEY } from "../lib/pocketbase";
 
@@ -61,6 +62,19 @@ export function SettingsView() {
 		},
 	});
 
+	const { mutate: doRefreshPosters, isPending: isRefreshing } = useMutation({
+		mutationFn: refreshUncachedPosters,
+		onSuccess: (count) => {
+			queryClient.invalidateQueries({ queryKey: ["posterCacheSize"] });
+			showToast(
+				count > 0
+					? `Cached ${count} poster${count === 1 ? "" : "s"}`
+					: "All posters already cached",
+			);
+		},
+		onError: () => showToast("Failed to refresh posters", "error"),
+	});
+
 	return (
 		<div className="flex h-full flex-col overflow-y-auto bg-gray-950 text-white">
 			<Toast
@@ -98,6 +112,32 @@ export function SettingsView() {
 							onClick={handleSavePbUrl}
 						>
 							Save
+						</button>
+					</div>
+				</section>
+
+				{/* Posters */}
+				<section className="flex flex-col gap-3">
+					<h2 className="text-xs font-semibold uppercase tracking-widest text-white/40">
+						Posters
+					</h2>
+					<div className="rounded-2xl border border-white/10 bg-gray-900">
+						<div className="px-4 py-3.5">
+							<p className="text-sm font-medium text-white">
+								Refresh TMDB Posters
+							</p>
+							<p className="mt-0.5 text-xs text-white/40">
+								Download posters for any movies missing a cached image.
+							</p>
+						</div>
+						<div className="h-px bg-white/10" />
+						<button
+							type="button"
+							disabled={isRefreshing}
+							className="w-full px-4 py-3.5 text-left text-sm font-medium text-blue-400 transition-opacity active:opacity-70 disabled:opacity-40"
+							onClick={() => doRefreshPosters()}
+						>
+							{isRefreshing ? "Refreshing…" : "Refresh Posters"}
 						</button>
 					</div>
 				</section>

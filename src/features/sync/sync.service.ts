@@ -1,6 +1,7 @@
 import type Database from "@tauri-apps/plugin-sql";
 import { getDb } from "../../lib/db";
 import { getPb } from "../../lib/pocketbase";
+import { cachePosterFromUrl } from "../tmdb/tmdb.service";
 import { PbMovieRecordSchema, SyncResultSchema } from "./sync.schema";
 import { useSyncStore } from "./sync.store";
 import type { SyncResult } from "./sync.types";
@@ -104,39 +105,52 @@ export async function runSync(
 
 					await db.execute("DELETE FROM movies WHERE id = $1", [row.id]);
 				} catch (e) {
-					errors.push(`Failed to delete movie ${row.id}: ${String(e)}`);
+					const msg = `Failed to delete movie ${row.id}: ${String(e)}`;
+					console.error("[sync] delete error:", msg, e);
+					errors.push(msg);
 				}
 			}
 		}
 
 		// --- PUSH LOCAL CHANGES ---
-		const localRows = lastSyncedAt
-			? await db.select<Record<string, unknown>[]>(
-					"SELECT * FROM movies WHERE updated_at > $1 AND deleted_at IS NULL",
-					[lastSyncedAt],
-				)
-			: await db.select<Record<string, unknown>[]>(
-					"SELECT * FROM movies WHERE deleted_at IS NULL",
-				);
+		// Always fetch all local movies and compare against PocketBase. Push a
+		// row if it is missing from PocketBase (never synced) or updated since
+		// the last sync. This catches movies added before last_synced_at that
+		// were never successfully pushed.
+		const localRows = await db.select<Record<string, unknown>[]>(
+			"SELECT * FROM movies WHERE deleted_at IS NULL",
+		);
+
+		const allPbRecords = await pb.collection("movies").getFullList();
+		const pbIdMap = new Map(
+			allPbRecords.map((r) => [r.local_id as string, r.id]),
+		);
 
 		// Track pushed local_ids so the pull step can skip them — avoids
 		// re-fetching records we just sent up.
 		const pushedLocalIds = new Set<string>();
 
-		if (localRows.length > 0) {
-			const allPbRecords = await pb.collection("movies").getFullList();
-			const pbIdMap = new Map(
-				allPbRecords.map((r) => [r.local_id as string, r.id]),
-			);
+		for (const row of localRows) {
+			const pbId = pbIdMap.get(row.id as string);
+			const updatedSinceLastSync =
+				!lastSyncedAt || (row.updated_at as string) > lastSyncedAt;
 
-			for (const row of localRows) {
+			if (!pbId || updatedSinceLastSync) {
 				try {
+					// Custom posters are base64 data URLs — too large for PocketBase
+					// and local-only by design. Only sync TMDB HTTPS URLs.
+					const posterUrl =
+						typeof row.poster_url === "string" &&
+						row.poster_url.startsWith("data:")
+							? null
+							: row.poster_url;
+
 					const payload = {
 						local_id: row.id,
 						tmdb_id: row.tmdb_id,
 						title: row.title,
 						year: row.year,
-						poster_url: row.poster_url,
+						poster_url: posterUrl,
 						tmdb_rating: row.tmdb_rating,
 						personal_rating: row.personal_rating,
 						status: row.status,
@@ -150,7 +164,6 @@ export async function runSync(
 						updated_at: row.updated_at,
 					};
 
-					const pbId = pbIdMap.get(row.id as string);
 					if (pbId) {
 						await pb.collection("movies").update(pbId, payload);
 					} else {
@@ -160,7 +173,9 @@ export async function runSync(
 					pushedLocalIds.add(row.id as string);
 					pushed++;
 				} catch (e) {
-					errors.push(`Failed to push movie ${String(row.id)}: ${String(e)}`);
+					const msg = `Failed to push movie ${String(row.id)}: ${String(e)}`;
+					console.error("[sync] push error:", msg, e);
+					errors.push(msg);
 				}
 			}
 		}
@@ -181,15 +196,31 @@ export async function runSync(
 
 				if (pushedLocalIds.has(validated.local_id)) continue;
 
+				// If the remote poster is a TMDB URL, cache it locally via Rust
+				// before inserting so the WebView can display it without CORS issues.
+				let posterUrl = validated.poster_url;
+				if (
+					posterUrl?.startsWith("https://image.tmdb.org") &&
+					validated.tmdb_id
+				) {
+					try {
+						posterUrl = await cachePosterFromUrl(validated.tmdb_id, posterUrl);
+					} catch {
+						// keep the TMDB URL if caching fails — better than losing it
+					}
+				}
+
 				// INSERT OR REPLACE bypasses the updated_at trigger so we
 				// preserve the remote timestamp exactly as received.
+				// COALESCE for poster_url: if remote is null (custom poster was
+				// stripped before push), keep whatever is stored locally.
 				await db.execute(
 					`INSERT OR REPLACE INTO movies (
 						id, tmdb_id, title, year, poster_url, tmdb_rating,
 						personal_rating, status, format, is_physical, is_digital,
 						is_backed_up, notes, deleted_at, created_at, updated_at
 					) VALUES (
-						$1, $2, $3, $4, $5, $6,
+						$1, $2, $3, $4, COALESCE($5, (SELECT poster_url FROM movies WHERE id = $1)), $6,
 						$7, $8, $9, $10, $11,
 						$12, $13, $14, $15, $16
 					)`,
@@ -198,7 +229,7 @@ export async function runSync(
 						validated.tmdb_id,
 						validated.title,
 						validated.year,
-						validated.poster_url,
+						posterUrl,
 						validated.tmdb_rating,
 						validated.personal_rating,
 						validated.status,
@@ -214,7 +245,9 @@ export async function runSync(
 				);
 				pulled++;
 			} catch (e) {
-				errors.push(`Failed to pull record ${record.id}: ${String(e)}`);
+				const msg = `Failed to pull record ${record.id}: ${String(e)}`;
+				console.error("[sync] pull error:", msg, e);
+				errors.push(msg);
 			}
 		}
 

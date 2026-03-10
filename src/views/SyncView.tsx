@@ -248,6 +248,18 @@ function SyncControls({ onLogout }: { onLogout: () => void }) {
 								</div>
 							)}
 						</div>
+						{syncResult.errors.length > 0 && (
+							<>
+								<div className="h-px bg-white/10" />
+								<div className="flex flex-col gap-1 px-4 py-3">
+									{syncResult.errors.map((err) => (
+										<p key={err} className="text-xs text-red-400">
+											{err}
+										</p>
+									))}
+								</div>
+							</>
+						)}
 					</>
 				)}
 			</div>

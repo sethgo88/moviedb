@@ -1,6 +1,27 @@
 import { z } from "zod";
 import { MovieFormatSchema, MovieStatusSchema } from "../movies/movies.schema";
 
+// PocketBase returns 0 for unset number fields and "" for unset string fields
+// instead of null. These helpers normalise those sentinel values to null.
+const pbNullableInt = z
+	.number()
+	.int()
+	.nullable()
+	.optional()
+	.transform((v) => (v == null || v === 0 ? null : v));
+
+const pbNullableNumber = z
+	.number()
+	.nullable()
+	.optional()
+	.transform((v) => (v == null || v === 0 ? null : v));
+
+const pbNullableString = z
+	.string()
+	.nullable()
+	.optional()
+	.transform((v) => (v === "" || v == null ? null : v));
+
 export const PbMovieRecordSchema = z.object({
 	// PocketBase metadata
 	id: z.string(),
@@ -10,21 +31,24 @@ export const PbMovieRecordSchema = z.object({
 	updated: z.string(),
 	// Our fields
 	local_id: z.string().uuid(),
-	tmdb_id: z.number().int().nullable(),
+	tmdb_id: pbNullableInt,
 	title: z.string(),
-	year: z.number().int().nullable(),
-	poster_url: z.string().nullable(),
-	tmdb_rating: z.number().nullable(),
-	personal_rating: z.number().min(1).max(10).nullable(),
+	year: pbNullableInt,
+	poster_url: pbNullableString,
+	tmdb_rating: pbNullableNumber,
+	personal_rating: pbNullableNumber,
 	status: MovieStatusSchema,
 	format: MovieFormatSchema,
 	is_physical: z.boolean(),
 	is_digital: z.boolean(),
 	is_backed_up: z.boolean(),
-	notes: z.string().nullable(),
-	deleted_at: z.string().nullable(),
+	notes: pbNullableString,
+	deleted_at: pbNullableString,
 	created_at: z.string(),
-	updated_at: z.string(),
+	updated_at: z
+		.string()
+		.optional()
+		.transform((v) => v ?? ""),
 });
 
 export const SyncResultSchema = z.object({

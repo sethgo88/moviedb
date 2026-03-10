@@ -124,9 +124,11 @@ Check for pending soft deletes (deleted_at IS NOT NULL)
 DeleteConfirmationView shown — user selects which to confirm
         ↓
 sync.service.runSync(skipDeleteConfirmation: false)
-  ├── PUSH: local rows where updated_at > last_synced_at → PocketBase upsert
+  ├── PUSH: ALL local rows checked against PocketBase — push if missing from remote OR updated_at > last_synced_at
+  │     poster_url stripped to null before push if it is a base64 data URL (custom posters are local-only)
   ├── PUSH DELETES: confirmed soft deletes → PocketBase delete, then hard local delete
   └── PULL: PocketBase records where updated_at > last_synced_at → SQLite upsert
+        poster_url uses COALESCE so a null remote value never overwrites a local custom poster
         ↓
 Update sync_meta.last_synced_at
         ↓

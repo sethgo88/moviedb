@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { getDb } from "../../lib/db";
 import { TmdbSearchResponseSchema } from "./tmdb.schema";
 import type { TmdbSearchResult } from "./tmdb.types";
 
@@ -31,6 +32,51 @@ export async function fetchAndCachePoster(
 
 	// Download via Rust and cache
 	return invoke<string>("cache_poster", { tmdbId, url });
+}
+
+/**
+ * Cache a poster from a full TMDB URL (e.g. as stored after a PocketBase pull).
+ * Checks local cache first; downloads via Rust reqwest only if not cached.
+ */
+export async function cachePosterFromUrl(
+	tmdbId: number,
+	fullUrl: string,
+): Promise<string> {
+	const cached = await invoke<string | null>("get_cached_poster", { tmdbId });
+	if (cached) return cached;
+	return invoke<string>("cache_poster", { tmdbId, url: fullUrl });
+}
+
+/**
+ * Find all movies with an uncached TMDB poster URL (poster_url starts with
+ * https://image.tmdb.org) and cache them locally via Rust.
+ * Returns the count of successfully cached posters.
+ */
+export async function refreshUncachedPosters(): Promise<number> {
+	const db = await getDb();
+	const rows = await db.select<
+		{ id: string; tmdb_id: number; poster_url: string }[]
+	>(
+		`SELECT id, tmdb_id, poster_url FROM movies
+		 WHERE deleted_at IS NULL
+		   AND tmdb_id IS NOT NULL
+		   AND poster_url LIKE 'https://image.tmdb.org%'`,
+	);
+
+	let count = 0;
+	for (const row of rows) {
+		try {
+			const dataUrl = await cachePosterFromUrl(row.tmdb_id, row.poster_url);
+			await db.execute("UPDATE movies SET poster_url = $1 WHERE id = $2", [
+				dataUrl,
+				row.id,
+			]);
+			count++;
+		} catch {
+			// silent fail — leave the TMDB URL in place if caching fails
+		}
+	}
+	return count;
 }
 
 export async function clearPosterCache(): Promise<void> {

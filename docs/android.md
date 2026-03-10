@@ -121,30 +121,31 @@ When adding a new Tauri plugin, add its permission identifier here and update `l
 
 ## Signing
 
-### Development (debug)
-Android Studio auto-generates a debug keystore at `~/.android/debug.keystore`. No setup needed.
+Both debug and release builds are signed with the same keystore. This lets you swap between `cargo tauri android dev` and the installed release APK without uninstalling each time.
 
-### Production (release)
-Generate a keystore once and store it securely outside the project directory:
+### One-time setup
 
+1. Generate the keystore (run once, keep the file safe):
 ```bash
-keytool -genkey -v \
-  -keystore release.keystore \
-  -alias movie-app \
-  -keyalg RSA \
-  -keysize 2048 \
-  -validity 10000
+keytool -genkey -v -keystore moviedb.keystore -alias moviedb -keyalg RSA -keysize 2048 -validity 10000
 ```
 
-Store credentials in `.env` (gitignored):
+2. Place the keystore at `src-tauri/gen/android/app/moviedb.keystore` (gitignored).
+
+3. Add credentials to `src-tauri/gen/android/local.properties` (gitignored — already contains `sdk.dir`):
 ```
-KEYSTORE_PATH=<absolute path — outside project>
-KEYSTORE_PASSWORD=<password>
-KEY_ALIAS=movie-app
-KEY_PASSWORD=<key password>
+signing.storePassword=<your password>
+signing.keyPassword=<your password>
 ```
 
-Configure `src-tauri/gen/android/app/build.gradle.kts` to read from environment variables. Never hardcode keystore credentials.
+4. `build.gradle.kts` reads from `local.properties` and applies the signing config to **both** debug and release build types. Never hardcode credentials in `build.gradle.kts`.
+
+### Switching between dev and release
+If Android refuses to install over the existing app with a signature mismatch, uninstall first:
+```bash
+adb uninstall io.moviedb.app
+```
+This only happens the first time after switching from the old auto-signed debug keystore.
 
 ---
 

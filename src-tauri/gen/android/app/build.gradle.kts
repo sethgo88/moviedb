@@ -13,6 +13,13 @@ val tauriProperties = Properties().apply {
     }
 }
 
+val localProperties = Properties().apply {
+    val propFile = file("../local.properties")
+    if (propFile.exists()) {
+        propFile.inputStream().use { load(it) }
+    }
+}
+
 android {
     compileSdk = 36
     namespace = "io.moviedb.app"
@@ -24,8 +31,17 @@ android {
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
     }
+    signingConfigs {
+        create("release") {
+            storeFile = file("moviedb.keystore")
+            storePassword = localProperties.getProperty("signing.storePassword")
+            keyAlias = "moviedb"
+            keyPassword = localProperties.getProperty("signing.keyPassword")
+        }
+    }
     buildTypes {
         getByName("debug") {
+            signingConfig = signingConfigs.getByName("release")
             manifestPlaceholders["usesCleartextTraffic"] = "true"
             isDebuggable = true
             isJniDebuggable = true
@@ -37,6 +53,7 @@ android {
             }
         }
         getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             proguardFiles(
                 *fileTree(".") { include("**/*.pro") }

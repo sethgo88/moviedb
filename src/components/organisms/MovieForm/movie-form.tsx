@@ -105,8 +105,11 @@ export function MovieForm({
 
 	// Router-level blocker — intercepts all navigation (NavBar, back gesture,
 	// programmatic navigate) when the form is dirty.
+	// Exclude isSubmitting: navigation triggered inside onSubmit (e.g. navigate
+	// after createMovie/updateMovie) must not be blocked — formApi.reset() hasn't
+	// run yet so isDirty is still true at that moment.
 	const blocker = useBlocker({
-		shouldBlockFn: () => form.state.isDirty,
+		shouldBlockFn: () => form.state.isDirty && !form.state.isSubmitting,
 		withResolver: true,
 	});
 

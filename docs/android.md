@@ -205,4 +205,10 @@ adb logcat -s AndroidRuntime:E
 Look for the Java exception stack trace. Usually a missing permission or failed plugin initialization.
 
 **Network calls work in dev but fail in release (e.g. PocketBase login)**
-Android blocks cleartext HTTP in release builds by default. Ensure `build.gradle.kts` sets `manifestPlaceholders["usesCleartextTraffic"] = "true"` inside `getByName("release")`. The debug block already sets this — the release block must set it explicitly or it inherits `false` from `defaultConfig`.
+Three layers must all be configured — missing any one causes failures:
+
+1. **OS cleartext traffic** — `build.gradle.kts` must set `manifestPlaceholders["usesCleartextTraffic"] = "true"` inside `getByName("release")`. The debug block already sets this; the release block must set it explicitly or it inherits `false` from `defaultConfig`.
+
+2. **WebView mixed content** — Release builds serve the app from `https://tauri.localhost`. Any `fetch()` to an HTTP URL is blocked as mixed content by default. `MainActivity.kt` overrides `onWebViewCreate` to set `WebSettings.MIXED_CONTENT_ALWAYS_ALLOW`, which permits HTTP requests from the HTTPS WebView origin.
+
+3. **Tauri CSP** — Even with `connect-src http://*` in the CSP, Tauri internally appends `upgrade-insecure-requests`, which silently rewrites `http://` URLs to `https://` before the request is made. This breaks HTTP PocketBase connections regardless of connect-src rules. The fix is `"csp": null` in `tauri.conf.json`, which disables CSP entirely. This is acceptable for a local-first Android app with no web-facing surface.

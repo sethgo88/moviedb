@@ -4,7 +4,8 @@
       "Bash(pnpm lint:*)",
       "Bash(pnpm format:*)",
       "Bash(pnpm:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "mcp__github__issue_write"
     ]
   }
 }

@@ -205,4 +205,8 @@ adb logcat -s AndroidRuntime:E
 Look for the Java exception stack trace. Usually a missing permission or failed plugin initialization.
 
 **Network calls work in dev but fail in release (e.g. PocketBase login)**
-Android blocks cleartext HTTP in release builds by default. Ensure `build.gradle.kts` sets `manifestPlaceholders["usesCleartextTraffic"] = "true"` inside `getByName("release")`. The debug block already sets this — the release block must set it explicitly or it inherits `false` from `defaultConfig`.
+Two layers must both be configured — missing either one causes failures:
+
+1. **OS cleartext traffic** — `build.gradle.kts` must set `manifestPlaceholders["usesCleartextTraffic"] = "true"` inside `getByName("release")`. The debug block already sets this; the release block must set it explicitly or it inherits `false` from `defaultConfig`.
+
+2. **WebView mixed content** — Release builds serve the app from `https://tauri.localhost`. Any `fetch()` to an HTTP URL is blocked as mixed content by default. `MainActivity.kt` overrides `onWebViewCreate` to set `WebSettings.MIXED_CONTENT_ALWAYS_ALLOW`, which permits HTTP requests from the HTTPS WebView origin.

@@ -1,6 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getDb } from "../../lib/db";
-import { TmdbSearchResponseSchema } from "./tmdb.schema";
+import {
+	TmdbMovieDetailsSchema,
+	TmdbSearchResponseSchema,
+} from "./tmdb.schema";
 import type { TmdbSearchResult } from "./tmdb.types";
 
 const TMDB_API_KEY = "c31792e2421ac6f25c2a57a506e23d8a";
@@ -48,32 +51,55 @@ export async function cachePosterFromUrl(
 }
 
 /**
- * Find all movies with an uncached TMDB poster URL (poster_url starts with
- * https://image.tmdb.org) and cache them locally via Rust.
+ * Fetch movie details from TMDB to get the poster_path.
+ * Returns null if the movie has no poster or the request fails.
+ */
+async function fetchTmdbPosterPath(tmdbId: number): Promise<string | null> {
+	const url = `${TMDB_BASE}/movie/${tmdbId}?api_key=${TMDB_API_KEY}`;
+	const res = await fetch(url);
+	if (!res.ok) return null;
+	const data = TmdbMovieDetailsSchema.parse(await res.json());
+	return data.poster_path;
+}
+
+/**
+ * Find all movies missing a local poster that have a tmdb_id, and cache
+ * their posters from TMDB. Handles two cases:
+ *   1. poster_url is a TMDB URL (e.g. after a sync pull) — cache directly.
+ *   2. poster_url is null — fetch movie details from TMDB to get poster_path,
+ *      then cache. This covers movies whose data URLs were stripped to null
+ *      before pushing to PocketBase.
  * Returns the count of successfully cached posters.
  */
 export async function refreshUncachedPosters(): Promise<number> {
 	const db = await getDb();
 	const rows = await db.select<
-		{ id: string; tmdb_id: number; poster_url: string }[]
+		{ id: string; tmdb_id: number; poster_url: string | null }[]
 	>(
 		`SELECT id, tmdb_id, poster_url FROM movies
 		 WHERE deleted_at IS NULL
 		   AND tmdb_id IS NOT NULL
-		   AND poster_url LIKE 'https://image.tmdb.org%'`,
+		   AND (poster_url IS NULL OR poster_url LIKE 'https://image.tmdb.org%')`,
 	);
 
 	let count = 0;
 	for (const row of rows) {
 		try {
-			const dataUrl = await cachePosterFromUrl(row.tmdb_id, row.poster_url);
+			let dataUrl: string;
+			if (row.poster_url) {
+				dataUrl = await cachePosterFromUrl(row.tmdb_id, row.poster_url);
+			} else {
+				const posterPath = await fetchTmdbPosterPath(row.tmdb_id);
+				if (!posterPath) continue;
+				dataUrl = await fetchAndCachePoster(row.tmdb_id, posterPath);
+			}
 			await db.execute("UPDATE movies SET poster_url = $1 WHERE id = $2", [
 				dataUrl,
 				row.id,
 			]);
 			count++;
 		} catch {
-			// silent fail — leave the TMDB URL in place if caching fails
+			// silent fail — skip this movie and continue with the rest
 		}
 	}
 	return count;

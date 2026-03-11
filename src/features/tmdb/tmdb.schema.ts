@@ -12,3 +12,8 @@ export const TmdbSearchResponseSchema = z.object({
 	results: z.array(TmdbSearchResultSchema),
 	total_results: z.number(),
 });
+
+export const TmdbMovieDetailsSchema = z.object({
+	id: z.number().int(),
+	poster_path: z.string().nullable(),
+});

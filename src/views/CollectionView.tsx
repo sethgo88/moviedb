@@ -263,9 +263,11 @@ export function CollectionView() {
 									{filtered.length} of {movies.length} movies
 								</p>
 							)}
-							{filtered.map((movie) => (
-								<MovieCard key={movie.id} movie={movie} />
-							))}
+							<div className="grid grid-cols-2 gap-4">
+								{filtered.map((movie) => (
+									<MovieCard key={movie.id} movie={movie} />
+								))}
+							</div>
 						</div>
 					)}
 				</div>

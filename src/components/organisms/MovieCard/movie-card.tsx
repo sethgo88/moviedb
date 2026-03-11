@@ -93,7 +93,7 @@ export function MovieCard({ movie }: MovieCardProps) {
 			{/* Card (slides left to reveal delete zone) */}
 			<button
 				type="button"
-				className="relative flex min-h-18 w-full overflow-hidden bg-gray-800 p-3 text-left transition-opacity active:opacity-80"
+				className="relative flex min-h-60 w-full overflow-hidden bg-gray-800 p-3 text-left transition-opacity active:opacity-80"
 				style={{
 					transform: `translateX(-${offset}px)`,
 					transition: swiping.current ? "none" : "transform 0.2s ease",
@@ -109,7 +109,7 @@ export function MovieCard({ movie }: MovieCardProps) {
 						src={movie.poster_url}
 						alt=""
 						aria-hidden="true"
-						className="absolute inset-0 h-full w-full object-cover object-center blur-[2px] brightness-75 grayscale-25"
+						className="absolute inset-0 h-full w-full object-cover object-center brightness-40 grayscale-25"
 					/>
 				) : (
 					<div className="absolute inset-0 flex items-center justify-center">
@@ -118,9 +118,9 @@ export function MovieCard({ movie }: MovieCardProps) {
 				)}
 
 				{/* Content */}
-				<div className="relative flex w-full gap-3">
+				<div className="relative flex flex-col w-full gap-3">
 					<div className="min-w-0 flex-1">
-						<p className="truncate font-semibold text-white">{movie.title}</p>
+						<p className="font-semibold text-white">{movie.title}</p>
 						{movie.year !== null && (
 							<p className="text-sm text-white">{movie.year}</p>
 						)}

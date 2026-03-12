@@ -4,6 +4,13 @@ export const MovieStatusSchema = z.enum(["OWNED", "WANTED"]);
 
 export const MovieFormatSchema = z.enum(["SD", "HD", "4K", "CUSTOM"]);
 
+export const MovieTypeSchema = z.enum([
+	"MOVIE",
+	"TV_SHOW",
+	"TV_SEASON",
+	"TV_EPISODE",
+]);
+
 export const MovieSchema = z.object({
 	id: z.string().uuid(),
 	tmdb_id: z.number().int().nullable(),
@@ -21,6 +28,9 @@ export const MovieSchema = z.object({
 	deleted_at: z.string().nullable(),
 	created_at: z.string(),
 	updated_at: z.string(),
+	type: MovieTypeSchema,
+	show_id: z.string().uuid().nullable(),
+	season_number: z.number().int().nullable(),
 });
 
 export const NewMovieSchema = MovieSchema.omit({

@@ -3,8 +3,16 @@ import { getDb } from "../../lib/db";
 import {
 	TmdbMovieDetailsSchema,
 	TmdbSearchResponseSchema,
+	TmdbSeasonDetailsSchema,
+	TmdbShowDetailsSchema,
+	TmdbTvSearchResponseSchema,
 } from "./tmdb.schema";
-import type { TmdbSearchResult } from "./tmdb.types";
+import type {
+	TmdbSearchResult,
+	TmdbSeasonDetails,
+	TmdbShowDetails,
+	TmdbTvSearchResult,
+} from "./tmdb.types";
 
 const TMDB_API_KEY = "c31792e2421ac6f25c2a57a506e23d8a";
 const TMDB_BASE = "https://api.themoviedb.org/3";
@@ -103,6 +111,47 @@ export async function refreshUncachedPosters(): Promise<number> {
 		}
 	}
 	return count;
+}
+
+export async function searchShows(
+	query: string,
+): Promise<TmdbTvSearchResult[]> {
+	const url = `${TMDB_BASE}/search/tv?query=${encodeURIComponent(query)}&api_key=${TMDB_API_KEY}&language=en-US&page=1`;
+	const res = await fetch(url);
+	if (!res.ok) throw new Error(`TMDB error: ${res.status}`);
+	const data = TmdbTvSearchResponseSchema.parse(await res.json());
+	return data.results;
+}
+
+export async function fetchShowDetails(
+	tmdbShowId: number,
+): Promise<TmdbShowDetails> {
+	const url = `${TMDB_BASE}/tv/${tmdbShowId}?api_key=${TMDB_API_KEY}`;
+	const res = await fetch(url);
+	if (!res.ok) throw new Error(`TMDB error: ${res.status}`);
+	return TmdbShowDetailsSchema.parse(await res.json());
+}
+
+/**
+ * Fetch season details. Returns the season poster_path if available,
+ * falling back to the show poster_path if the season has none.
+ */
+export async function fetchSeasonDetails(
+	tmdbShowId: number,
+	seasonNumber: number,
+): Promise<TmdbSeasonDetails> {
+	const [seasonRes, showRes] = await Promise.all([
+		fetch(
+			`${TMDB_BASE}/tv/${tmdbShowId}/season/${seasonNumber}?api_key=${TMDB_API_KEY}`,
+		),
+		fetch(`${TMDB_BASE}/tv/${tmdbShowId}?api_key=${TMDB_API_KEY}`),
+	]);
+	if (!seasonRes.ok) throw new Error(`TMDB error: ${seasonRes.status}`);
+	const season = TmdbSeasonDetailsSchema.parse(await seasonRes.json());
+	if (season.poster_path) return season;
+	if (!showRes.ok) return season;
+	const show = TmdbShowDetailsSchema.parse(await showRes.json());
+	return { ...season, poster_path: show.poster_path };
 }
 
 export async function clearPosterCache(): Promise<void> {

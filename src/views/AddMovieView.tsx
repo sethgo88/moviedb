@@ -570,7 +570,7 @@ export function AddMovieView() {
 										onChange={(enabled) =>
 											field.handleChange(enabled ? 7 : null)
 										}
-										label="Rate this movie"
+										label={`Rate this ${mode === "MOVIE" ? "Movie" : "Show"}`}
 									/>
 									{field.state.value !== null && (
 										<Slider

@@ -394,7 +394,7 @@ export function CollectionView() {
 						className="w-full"
 						onClick={() => navigate({ to: "/movie/add" })}
 					>
-						+ Add Movie
+						+ Add Movie/Show
 					</Button>
 				</div>
 			)}

@@ -15,7 +15,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
 	{ label: "Collection", icon: Film, to: "/" },
-	{ label: "Add Movie", icon: Plus, to: "/movie/add" },
+	{ label: "Add Media", icon: Plus, to: "/movie/add" },
 	{ label: "Sync", icon: RefreshCw, to: "/sync" },
 	{ label: "Settings", icon: Settings, to: "/settings" },
 ];

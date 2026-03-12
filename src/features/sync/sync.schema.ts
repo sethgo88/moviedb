@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { MovieFormatSchema, MovieStatusSchema } from "../movies/movies.schema";
+import {
+	MovieFormatSchema,
+	MovieStatusSchema,
+	MovieTypeSchema,
+} from "../movies/movies.schema";
 
 // PocketBase returns 0 for unset number fields and "" for unset string fields
 // instead of null. These helpers normalise those sentinel values to null.
@@ -49,6 +53,10 @@ export const PbMovieRecordSchema = z.object({
 		.string()
 		.optional()
 		.transform((v) => v ?? ""),
+	// TV show fields — optional with safe fallbacks for old PocketBase records
+	type: MovieTypeSchema.catch("MOVIE"),
+	show_id: pbNullableString,
+	season_number: pbNullableInt,
 });
 
 export const SyncResultSchema = z.object({

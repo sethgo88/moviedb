@@ -162,6 +162,9 @@ export async function runSync(
 						deleted_at: row.deleted_at,
 						created_at: row.created_at,
 						updated_at: row.updated_at,
+						type: row.type,
+						show_id: row.show_id,
+						season_number: row.season_number,
 					};
 
 					if (pbId) {
@@ -218,11 +221,13 @@ export async function runSync(
 					`INSERT OR REPLACE INTO movies (
 						id, tmdb_id, title, year, poster_url, tmdb_rating,
 						personal_rating, status, format, is_physical, is_digital,
-						is_backed_up, notes, deleted_at, created_at, updated_at
+						is_backed_up, notes, deleted_at, created_at, updated_at,
+						type, show_id, season_number
 					) VALUES (
 						$1, $2, $3, $4, COALESCE($5, (SELECT poster_url FROM movies WHERE id = $1)), $6,
 						$7, $8, $9, $10, $11,
-						$12, $13, $14, $15, $16
+						$12, $13, $14, $15, $16,
+						$17, $18, $19
 					)`,
 					[
 						validated.local_id,
@@ -241,6 +246,9 @@ export async function runSync(
 						validated.deleted_at,
 						validated.created_at,
 						validated.updated_at,
+						validated.type,
+						validated.show_id,
+						validated.season_number,
 					],
 				);
 				pulled++;

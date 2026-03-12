@@ -33,11 +33,13 @@ export async function createMovie(data: NewMovie): Promise<Movie> {
 		`INSERT INTO movies (
       id, tmdb_id, title, year, poster_url, tmdb_rating, personal_rating,
       status, format, is_physical, is_digital, is_backed_up, notes,
-      deleted_at, created_at, updated_at
+      deleted_at, created_at, updated_at,
+      type, show_id, season_number
     ) VALUES (
       $1, $2, $3, $4, $5, $6, $7,
       $8, $9, $10, $11, $12, $13,
-      NULL, $14, $14
+      NULL, $14, $14,
+      $15, $16, $17
     )`,
 		[
 			id,
@@ -54,6 +56,9 @@ export async function createMovie(data: NewMovie): Promise<Movie> {
 			validated.is_backed_up,
 			validated.notes ?? null,
 			now,
+			validated.type,
+			validated.show_id ?? null,
+			validated.season_number ?? null,
 		],
 	);
 
@@ -61,6 +66,16 @@ export async function createMovie(data: NewMovie): Promise<Movie> {
 	if (created === null)
 		throw new Error(`Failed to retrieve movie after insert: ${id}`);
 	return created;
+}
+
+export async function getShowByTmdbId(tmdbId: number): Promise<Movie | null> {
+	const db = await getDb();
+	const rows = await db.select(
+		"SELECT * FROM movies WHERE tmdb_id = $1 AND type = 'TV_SHOW' AND deleted_at IS NULL LIMIT 1",
+		[tmdbId],
+	);
+	const results = z.array(MovieSchema).parse(rows);
+	return results[0] ?? null;
 }
 
 const ALLOWED_UPDATE_COLUMNS = new Set([
@@ -76,6 +91,9 @@ const ALLOWED_UPDATE_COLUMNS = new Set([
 	"is_digital",
 	"is_backed_up",
 	"notes",
+	"type",
+	"show_id",
+	"season_number",
 ]);
 
 export async function updateMovie(

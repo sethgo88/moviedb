@@ -124,12 +124,18 @@ export function MovieCard({ movie }: MovieCardProps) {
 						{movie.year !== null && (
 							<p className="text-sm text-white">{movie.year}</p>
 						)}
-						<div className="mt-1 flex gap-1.5">
+						<div className="mt-1 flex flex-wrap gap-1.5">
 							<Badge label={movie.status} className={statusClassName} />
 							<Badge
 								label={movie.format}
 								className="bg-white/10 text-white/70"
 							/>
+							{movie.type === "TV_SEASON" && movie.season_number !== null && (
+								<Badge
+									label={`S${movie.season_number}`}
+									className="bg-blue-600/20 text-blue-400"
+								/>
+							)}
 						</div>
 					</div>
 

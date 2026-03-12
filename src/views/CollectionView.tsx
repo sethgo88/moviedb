@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { TvMinimalPlay } from "lucide-react";
 import { Button } from "../components/atoms/Button/button";
 import { Spinner } from "../components/atoms/Spinner/spinner";
 import { SearchBar } from "../components/molecules/SearchBar/search-bar";
@@ -15,6 +16,11 @@ import type {
 import { useDebounce } from "../hooks/useDebounce";
 import { usePullToRefresh } from "../hooks/usePullToRefresh";
 import { cn } from "../lib/cn";
+
+const TYPE_CHIPS = [
+	{ label: "Movies", value: "MOVIE" as const },
+	{ label: "Shows", value: "TV" as const },
+];
 
 const STATUS_CHIPS: { label: string; value: MovieStatus }[] = [
 	{ label: "Owned", value: "OWNED" },
@@ -74,11 +80,13 @@ export function CollectionView() {
 	const { data: movies = [], isLoading } = useMovies();
 	const {
 		search,
+		typeFilter,
 		statusFilter,
 		formatFilter,
 		physicalFilter,
 		digitalFilter,
 		sortBy,
+		setTypeFilter,
 		setStatusFilter,
 		setFormatFilter,
 		setPhysicalFilter,
@@ -100,14 +108,20 @@ export function CollectionView() {
 	});
 
 	const hasFilters =
+		typeFilter !== null ||
 		statusFilter !== null ||
 		formatFilter !== null ||
 		physicalFilter !== null ||
 		digitalFilter !== null ||
 		Boolean(debouncedSearch);
 
+	// TV_SHOW rows are container records — exclude from the flat list and TV
+	// season results; they're used only as headers in the grouped TV view.
 	const filtered = sortMovies(
 		movies.filter((m) => {
+			if (m.type === "TV_SHOW") return false;
+			if (typeFilter === "MOVIE" && m.type !== "MOVIE") return false;
+			if (typeFilter === "TV" && m.type !== "TV_SEASON") return false;
 			if (statusFilter && m.status !== statusFilter) return false;
 			if (formatFilter && m.format !== formatFilter) return false;
 			if (physicalFilter !== null && Boolean(m.is_physical) !== physicalFilter)
@@ -122,6 +136,24 @@ export function CollectionView() {
 			return true;
 		}),
 		sortBy,
+	);
+
+	// Build TV grouped structure when in TV mode
+	const showMap = new Map(
+		movies.filter((m) => m.type === "TV_SHOW").map((m) => [m.id, m]),
+	);
+	const tvSeasons = filtered; // all TV_SEASON when typeFilter === 'TV'
+	const uniqueShowIds = [
+		...new Set(
+			tvSeasons.map((m) => m.show_id).filter((id): id is string => id !== null),
+		),
+	];
+	const sortedShows = uniqueShowIds
+		.map((id) => showMap.get(id))
+		.filter((s): s is Movie => s !== undefined)
+		.sort((a, b) => a.title.localeCompare(b.title));
+	const orphanSeasons = tvSeasons.filter(
+		(m) => m.show_id === null || !showMap.has(m.show_id),
 	);
 
 	return (
@@ -147,6 +179,22 @@ export function CollectionView() {
 
 				{/* Filter chips */}
 				<div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
+					{TYPE_CHIPS.map(({ label, value }) => (
+						<button
+							key={value}
+							type="button"
+							onClick={() => setTypeFilter(typeFilter === value ? null : value)}
+							className={cn(
+								chipBase,
+								typeFilter === value ? chipActive : chipInactive,
+							)}
+						>
+							{label}
+						</button>
+					))}
+
+					<div className="w-px shrink-0 bg-white/10" />
+
 					{STATUS_CHIPS.map(({ label, value }) => (
 						<button
 							key={value}
@@ -255,12 +303,79 @@ export function CollectionView() {
 								</button>
 							)}
 						</div>
-					) : (
+					) : typeFilter === "TV" ? (
+						/* Grouped TV view — seasons nested under show headers */
 						<div className="flex flex-col gap-2">
-							{/* Count badge */}
 							{hasFilters && (
 								<p className="text-xs text-white/40">
-									{filtered.length} of {movies.length} movies
+									{filtered.length} results
+								</p>
+							)}
+							<div className="flex flex-col gap-6">
+								{sortedShows.map((show) => {
+									const seasons = tvSeasons
+										.filter((m) => m.show_id === show.id)
+										.sort(
+											(a, b) => (a.season_number ?? 0) - (b.season_number ?? 0),
+										);
+									return (
+										<div key={show.id}>
+											{/* Show header */}
+											<button
+												type="button"
+												className="relative mb-2 flex min-h-16 w-full overflow-hidden rounded-xl bg-gray-800 p-3 text-left"
+												onClick={() =>
+													navigate({
+														to: "/movie/$id/edit",
+														params: { id: show.id },
+													})
+												}
+											>
+												{show.poster_url && (
+													<img
+														src={show.poster_url}
+														alt=""
+														aria-hidden="true"
+														className="absolute inset-0 h-full w-full object-cover object-center brightness-30 grayscale-25"
+													/>
+												)}
+												<div className="relative flex items-center gap-2">
+													<TvMinimalPlay
+														size={16}
+														className="shrink-0 text-blue-400"
+													/>
+													<p className="font-semibold text-white">
+														{show.title}
+													</p>
+													{show.year !== null && (
+														<p className="text-sm text-white/60">{show.year}</p>
+													)}
+												</div>
+											</button>
+											{/* Season grid */}
+											<div className="grid grid-cols-2 gap-4">
+												{seasons.map((season) => (
+													<MovieCard key={season.id} movie={season} />
+												))}
+											</div>
+										</div>
+									);
+								})}
+								{orphanSeasons.length > 0 && (
+									<div className="grid grid-cols-2 gap-4">
+										{orphanSeasons.map((season) => (
+											<MovieCard key={season.id} movie={season} />
+										))}
+									</div>
+								)}
+							</div>
+						</div>
+					) : (
+						/* Flat grid — movies (+ TV seasons in all mode) */
+						<div className="flex flex-col gap-2">
+							{hasFilters && (
+								<p className="text-xs text-white/40">
+									{filtered.length} results
 								</p>
 							)}
 							<div className="grid grid-cols-2 gap-4">

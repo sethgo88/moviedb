@@ -1,8 +1,11 @@
 import { create } from "zustand";
 import type { MovieFormat, MovieStatus, SortOption } from "./movies.types";
 
+export type TypeFilter = "MOVIE" | "TV";
+
 interface MoviesState {
 	search: string;
+	typeFilter: TypeFilter | null;
 	statusFilter: MovieStatus | null;
 	formatFilter: MovieFormat | null;
 	physicalFilter: boolean | null;
@@ -10,6 +13,7 @@ interface MoviesState {
 	sortBy: SortOption;
 	selectedMovieId: string | null;
 	setSearch: (q: string) => void;
+	setTypeFilter: (t: TypeFilter | null) => void;
 	setStatusFilter: (s: MovieStatus | null) => void;
 	setFormatFilter: (f: MovieFormat | null) => void;
 	setPhysicalFilter: (v: boolean | null) => void;
@@ -21,6 +25,7 @@ interface MoviesState {
 
 export const useMoviesStore = create<MoviesState>()((set) => ({
 	search: "",
+	typeFilter: null,
 	statusFilter: null,
 	formatFilter: null,
 	physicalFilter: null,
@@ -28,6 +33,7 @@ export const useMoviesStore = create<MoviesState>()((set) => ({
 	sortBy: "title_asc",
 	selectedMovieId: null,
 	setSearch: (q) => set({ search: q }),
+	setTypeFilter: (t) => set({ typeFilter: t }),
 	setStatusFilter: (s) => set({ statusFilter: s }),
 	setFormatFilter: (f) => set({ formatFilter: f }),
 	setPhysicalFilter: (v) => set({ physicalFilter: v }),
@@ -38,6 +44,7 @@ export const useMoviesStore = create<MoviesState>()((set) => ({
 	clearFilters: () =>
 		set({
 			search: "",
+			typeFilter: null,
 			statusFilter: null,
 			formatFilter: null,
 			physicalFilter: null,

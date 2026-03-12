@@ -11,13 +11,18 @@ import { FormField } from "@/components/molecules/FormField/form-field";
 import { ToggleGroup } from "@/components/molecules/ToggleGroup/toggle-group";
 import { useCreateMovie } from "@/features/movies/movies.queries";
 import { NewMovieSchema } from "@/features/movies/movies.schema";
+import { getShowByTmdbId } from "@/features/movies/movies.service";
 import type { MovieFormat, MovieStatus } from "@/features/movies/movies.types";
-import { useTmdbSearch } from "@/features/tmdb/tmdb.queries";
+import { useTmdbSearch, useTmdbTvSearch } from "@/features/tmdb/tmdb.queries";
 import {
 	fetchAndCachePoster,
+	fetchSeasonDetails,
 	TMDB_POSTER_BASE,
 } from "@/features/tmdb/tmdb.service";
-import type { TmdbSearchResult } from "@/features/tmdb/tmdb.types";
+import type {
+	TmdbSearchResult,
+	TmdbTvSearchResult,
+} from "@/features/tmdb/tmdb.types";
 
 const STATUS_OPTIONS: { label: string; value: MovieStatus }[] = [
 	{ label: "Owned", value: "OWNED" },
@@ -68,36 +73,112 @@ const DEFAULTS: AddFormValues = {
 export function AddMovieView() {
 	const navigate = useNavigate();
 	const { mutateAsync: createMovie } = useCreateMovie();
+
+	const [mode, setMode] = useState<"MOVIE" | "TV">("MOVIE");
 	const [titleQuery, setTitleQuery] = useState("");
 	const [isTitleFocused, setIsTitleFocused] = useState(false);
 	const [loadingId, setLoadingId] = useState<number | null>(null);
 
-	const { data: searchResults, isFetching: isSearching } =
-		useTmdbSearch(titleQuery);
+	// TV-specific state
+	const [selectedShow, setSelectedShow] = useState<TmdbTvSearchResult | null>(
+		null,
+	);
+	const [seasonNumber, setSeasonNumber] = useState("");
+	const [isFetchingSeasonPoster, setIsFetchingSeasonPoster] = useState(false);
+	const [showPosterUrl, setShowPosterUrl] = useState<string | null>(null);
+
+	// Both hooks always called; pass empty string to disable whichever isn't active
+	const { data: movieResults, isFetching: isFetchingMovies } = useTmdbSearch(
+		mode === "MOVIE" ? titleQuery : "",
+	);
+	const { data: tvResults, isFetching: isFetchingTv } = useTmdbTvSearch(
+		mode === "TV" ? titleQuery : "",
+	);
+
+	const searchResults = mode === "MOVIE" ? movieResults : tvResults;
+	const isSearching = mode === "MOVIE" ? isFetchingMovies : isFetchingTv;
 	const showDropdown =
 		isTitleFocused && !!searchResults && searchResults.length > 0;
 
 	const form = useForm({
 		defaultValues: DEFAULTS,
 		onSubmit: async ({ value, formApi }) => {
-			const payload = NewMovieSchema.parse({
-				title: value.title.trim(),
-				year: Number(value.year),
-				tmdb_id: value.tmdb_id,
-				poster_url: value.poster_url,
-				tmdb_rating: value.tmdb_rating,
-				personal_rating: value.personal_rating,
-				status: value.status,
-				format: value.format,
-				is_physical: value.is_physical ? 1 : 0,
-				is_digital: value.is_digital ? 1 : 0,
-				is_backed_up: 0,
-				notes: value.notes.trim() || null,
-				type: "MOVIE",
-				show_id: null,
-				season_number: null,
-			});
-			await createMovie(payload);
+			if (mode === "MOVIE") {
+				const payload = NewMovieSchema.parse({
+					title: value.title.trim(),
+					year: Number(value.year),
+					tmdb_id: value.tmdb_id,
+					poster_url: value.poster_url,
+					tmdb_rating: value.tmdb_rating,
+					personal_rating: value.personal_rating,
+					status: value.status,
+					format: value.format,
+					is_physical: value.is_physical ? 1 : 0,
+					is_digital: value.is_digital ? 1 : 0,
+					is_backed_up: 0,
+					notes: value.notes.trim() || null,
+					type: "MOVIE",
+					show_id: null,
+					season_number: null,
+				});
+				await createMovie(payload);
+			} else {
+				// TV mode — find or create TV_SHOW row, then create TV_SEASON row
+				const n = Number(seasonNumber);
+				if (!selectedShow || !n || n < 1) return;
+
+				let showId: string;
+				const existingShow = await getShowByTmdbId(selectedShow.id);
+				if (existingShow) {
+					showId = existingShow.id;
+				} else {
+					const showRow = await createMovie(
+						NewMovieSchema.parse({
+							title: selectedShow.name,
+							year: selectedShow.first_air_date
+								? Number(selectedShow.first_air_date.slice(0, 4))
+								: null,
+							tmdb_id: selectedShow.id,
+							poster_url: showPosterUrl,
+							tmdb_rating:
+								selectedShow.vote_average > 0
+									? selectedShow.vote_average
+									: null,
+							personal_rating: null,
+							status: value.status,
+							format: value.format,
+							is_physical: 0,
+							is_digital: 0,
+							is_backed_up: 0,
+							notes: null,
+							type: "TV_SHOW",
+							show_id: null,
+							season_number: null,
+						}),
+					);
+					showId = showRow.id;
+				}
+
+				const seasonPayload = NewMovieSchema.parse({
+					title: `${selectedShow.name} — Season ${n}`,
+					year: value.year ? Number(value.year) : null,
+					tmdb_id: value.tmdb_id,
+					poster_url: value.poster_url,
+					tmdb_rating: value.tmdb_rating,
+					personal_rating: value.personal_rating,
+					status: value.status,
+					format: value.format,
+					is_physical: value.is_physical ? 1 : 0,
+					is_digital: value.is_digital ? 1 : 0,
+					is_backed_up: 0,
+					notes: value.notes.trim() || null,
+					type: "TV_SEASON",
+					show_id: showId,
+					season_number: n,
+				});
+				await createMovie(seasonPayload);
+			}
+
 			formApi.reset(value);
 			navigate({ to: "/" });
 		},
@@ -108,7 +189,18 @@ export function AddMovieView() {
 		withResolver: true,
 	});
 
-	async function handleSelectResult(result: TmdbSearchResult) {
+	function switchMode(next: "MOVIE" | "TV") {
+		if (next === mode) return;
+		setMode(next);
+		setTitleQuery("");
+		setIsTitleFocused(false);
+		setSelectedShow(null);
+		setSeasonNumber("");
+		setShowPosterUrl(null);
+		form.reset();
+	}
+
+	async function handleSelectMovieResult(result: TmdbSearchResult) {
 		setLoadingId(result.id);
 		let posterUrl: string | null = null;
 		if (result.poster_path) {
@@ -133,6 +225,55 @@ export function AddMovieView() {
 		setIsTitleFocused(false);
 	}
 
+	async function handleSelectTvShow(result: TmdbTvSearchResult) {
+		setLoadingId(result.id);
+		let posterUrl: string | null = null;
+		if (result.poster_path) {
+			try {
+				posterUrl = await fetchAndCachePoster(result.id, result.poster_path);
+			} catch {
+				// poster unavailable — other fields still applied
+			}
+		}
+		setLoadingId(null);
+		setSelectedShow(result);
+		setShowPosterUrl(posterUrl);
+		form.setFieldValue("title", result.name);
+		if (result.first_air_date) {
+			form.setFieldValue("year", result.first_air_date.slice(0, 4));
+		}
+		form.setFieldValue("tmdb_id", result.id);
+		form.setFieldValue(
+			"tmdb_rating",
+			result.vote_average > 0 ? result.vote_average : null,
+		);
+		if (posterUrl) form.setFieldValue("poster_url", posterUrl);
+		setTitleQuery("");
+		setIsTitleFocused(false);
+	}
+
+	async function handleSeasonNumberBlur() {
+		if (!selectedShow || !seasonNumber) return;
+		const n = Number(seasonNumber);
+		if (!n || n < 1) return;
+		setIsFetchingSeasonPoster(true);
+		try {
+			const details = await fetchSeasonDetails(selectedShow.id, n);
+			if (details.poster_path) {
+				const posterUrl = await fetchAndCachePoster(
+					details.id,
+					details.poster_path,
+				);
+				form.setFieldValue("poster_url", posterUrl);
+			}
+		} catch {
+			// leave poster as show-level poster
+		}
+		setIsFetchingSeasonPoster(false);
+	}
+
+	const titlePlaceholder = mode === "MOVIE" ? "Movie title" : "Show title";
+
 	return (
 		<div className="flex h-full flex-col bg-gray-950 text-white">
 			{/* Header */}
@@ -144,7 +285,9 @@ export function AddMovieView() {
 				>
 					Back
 				</button>
-				<h1 className="flex-1 text-center text-lg font-semibold">Add Movie</h1>
+				<h1 className="flex-1 text-center text-lg font-semibold">
+					{mode === "MOVIE" ? "Add Movie" : "Add TV Show"}
+				</h1>
 				<form.Subscribe selector={(s) => s.isSubmitting}>
 					{(isSubmitting) => (
 						<button
@@ -167,18 +310,19 @@ export function AddMovieView() {
 					}}
 					className="flex flex-col gap-5"
 				>
-					{/* Mode toggle — TV enabled in #41 */}
+					{/* Mode toggle */}
 					<div className="flex gap-2">
 						<button
 							type="button"
-							className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-semibold text-white"
+							className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-colors ${mode === "MOVIE" ? "bg-blue-600 text-white" : "bg-white/5 text-white/50"}`}
+							onClick={() => switchMode("MOVIE")}
 						>
 							Movie
 						</button>
 						<button
 							type="button"
-							disabled
-							className="flex-1 rounded-lg bg-white/5 py-2 text-sm font-semibold text-white/30"
+							className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-colors ${mode === "TV" ? "bg-blue-600 text-white" : "bg-white/5 text-white/50"}`}
+							onClick={() => switchMode("TV")}
 						>
 							TV Show
 						</button>
@@ -207,11 +351,13 @@ export function AddMovieView() {
 								<div className="relative">
 									<input
 										value={field.state.value}
-										placeholder="Movie title"
+										placeholder={titlePlaceholder}
 										className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-white placeholder-white/30 outline-none transition-colors focus:border-blue-500"
 										onChange={(e) => {
 											field.handleChange(e.target.value);
 											setTitleQuery(e.target.value);
+											// Clear selected show if user edits the title in TV mode
+											if (mode === "TV") setSelectedShow(null);
 										}}
 										onFocus={() => setIsTitleFocused(true)}
 										onBlur={() => {
@@ -226,48 +372,92 @@ export function AddMovieView() {
 													Searching…
 												</li>
 											)}
-											{searchResults?.map((result) => {
-												const year = result.release_date?.slice(0, 4);
-												const isLoading = loadingId === result.id;
-												return (
-													<li key={result.id}>
-														<button
-															type="button"
-															disabled={loadingId !== null}
-															className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors active:bg-white/5 disabled:opacity-50"
-															onMouseDown={(e) => e.preventDefault()}
-															onClick={() => handleSelectResult(result)}
-														>
-															<div className="h-12 w-8 shrink-0 overflow-hidden rounded bg-white/10">
-																{result.poster_path ? (
-																	<img
-																		src={`${TMDB_POSTER_BASE}${result.poster_path}`}
-																		alt={result.title}
-																		className="h-full w-full object-cover"
-																	/>
-																) : (
-																	<div className="h-full w-full" />
-																)}
-															</div>
-															<div className="min-w-0 flex-1">
-																<p className="truncate text-sm font-medium text-white">
-																	{result.title}
-																</p>
-																{year && (
-																	<p className="text-xs text-white/50">
-																		{year}
+											{mode === "MOVIE" &&
+												(movieResults ?? []).map((result) => {
+													const year = result.release_date?.slice(0, 4);
+													const isLoading = loadingId === result.id;
+													return (
+														<li key={result.id}>
+															<button
+																type="button"
+																disabled={loadingId !== null}
+																className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors active:bg-white/5 disabled:opacity-50"
+																onMouseDown={(e) => e.preventDefault()}
+																onClick={() => handleSelectMovieResult(result)}
+															>
+																<div className="h-12 w-8 shrink-0 overflow-hidden rounded bg-white/10">
+																	{result.poster_path ? (
+																		<img
+																			src={`${TMDB_POSTER_BASE}${result.poster_path}`}
+																			alt={result.title}
+																			className="h-full w-full object-cover"
+																		/>
+																	) : (
+																		<div className="h-full w-full" />
+																	)}
+																</div>
+																<div className="min-w-0 flex-1">
+																	<p className="truncate text-sm font-medium text-white">
+																		{result.title}
 																	</p>
+																	{year && (
+																		<p className="text-xs text-white/50">
+																			{year}
+																		</p>
+																	)}
+																</div>
+																{isLoading && (
+																	<span className="text-xs text-white/40">
+																		Loading…
+																	</span>
 																)}
-															</div>
-															{isLoading && (
-																<span className="text-xs text-white/40">
-																	Loading…
-																</span>
-															)}
-														</button>
-													</li>
-												);
-											})}
+															</button>
+														</li>
+													);
+												})}
+											{mode === "TV" &&
+												(tvResults ?? []).map((result) => {
+													const year = result.first_air_date?.slice(0, 4);
+													const isLoading = loadingId === result.id;
+													return (
+														<li key={result.id}>
+															<button
+																type="button"
+																disabled={loadingId !== null}
+																className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors active:bg-white/5 disabled:opacity-50"
+																onMouseDown={(e) => e.preventDefault()}
+																onClick={() => handleSelectTvShow(result)}
+															>
+																<div className="h-12 w-8 shrink-0 overflow-hidden rounded bg-white/10">
+																	{result.poster_path ? (
+																		<img
+																			src={`${TMDB_POSTER_BASE}${result.poster_path}`}
+																			alt={result.name}
+																			className="h-full w-full object-cover"
+																		/>
+																	) : (
+																		<div className="h-full w-full" />
+																	)}
+																</div>
+																<div className="min-w-0 flex-1">
+																	<p className="truncate text-sm font-medium text-white">
+																		{result.name}
+																	</p>
+																	{year && (
+																		<p className="text-xs text-white/50">
+																			{year}
+																		</p>
+																	)}
+																</div>
+																{isLoading && (
+																	<span className="text-xs text-white/40">
+																		Loading…
+																	</span>
+																)}
+															</button>
+														</li>
+													);
+												})}
 										</ul>
 									)}
 								</div>
@@ -275,18 +465,40 @@ export function AddMovieView() {
 						)}
 					</form.Field>
 
-					{/* Year */}
-					<form.Field name="year">
-						{(field) => (
-							<FormField label="Year">
-								<Select
-									options={YEAR_OPTIONS}
-									value={field.state.value}
-									onChange={(e) => field.handleChange(e.target.value)}
-								/>
-							</FormField>
-						)}
-					</form.Field>
+					{/* Season number — TV mode only, revealed after show selected */}
+					{mode === "TV" && selectedShow && (
+						<FormField label="Season Number">
+							<input
+								type="number"
+								min={1}
+								value={seasonNumber}
+								placeholder="e.g. 1"
+								className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-white placeholder-white/30 outline-none transition-colors focus:border-blue-500"
+								onChange={(e) => setSeasonNumber(e.target.value)}
+								onBlur={handleSeasonNumberBlur}
+							/>
+							{isFetchingSeasonPoster && (
+								<p className="mt-1 text-xs text-white/40">
+									Fetching season poster…
+								</p>
+							)}
+						</FormField>
+					)}
+
+					{/* Year — hidden in TV mode (derived from first_air_date) */}
+					{mode === "MOVIE" && (
+						<form.Field name="year">
+							{(field) => (
+								<FormField label="Year">
+									<Select
+										options={YEAR_OPTIONS}
+										value={field.state.value}
+										onChange={(e) => field.handleChange(e.target.value)}
+									/>
+								</FormField>
+							)}
+						</form.Field>
+					)}
 
 					{/* Poster + Physical/Digital */}
 					<div className="flex gap-4">

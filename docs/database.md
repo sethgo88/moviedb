@@ -31,7 +31,10 @@ CREATE TABLE IF NOT EXISTS movies (
     notes        TEXT,
     deleted_at   TEXT,                     -- null = active, ISO 8601 = soft-deleted
     created_at   TEXT NOT NULL,            -- ISO 8601
-    updated_at   TEXT NOT NULL             -- ISO 8601 — maintained by trigger
+    updated_at   TEXT NOT NULL,            -- ISO 8601 — maintained by trigger
+    type         TEXT NOT NULL DEFAULT 'MOVIE',  -- 'MOVIE' | 'TV_SHOW' | 'TV_SEASON' | 'TV_EPISODE'
+    show_id      TEXT,                     -- UUID ref to parent TV show row (nullable)
+    season_number INTEGER                  -- season number for TV_SEASON rows (nullable)
 );
 
 CREATE INDEX IF NOT EXISTS idx_movies_tmdb_id ON movies(tmdb_id);
@@ -99,6 +102,16 @@ let migrations = vec![
             ALTER TABLE movies_new RENAME TO movies;
             CREATE INDEX idx_movies_tmdb_id ON movies (tmdb_id);
             CREATE TRIGGER movies_updated_at ...;
+        ",
+        kind: tauri_plugin_sql::MigrationKind::Up,
+    },
+    tauri_plugin_sql::Migration {
+        version: 3,
+        description: "add_type_show_id_season_number",
+        sql: "
+            ALTER TABLE movies ADD COLUMN type TEXT NOT NULL DEFAULT 'MOVIE';
+            ALTER TABLE movies ADD COLUMN show_id TEXT;
+            ALTER TABLE movies ADD COLUMN season_number INTEGER;
         ",
         kind: tauri_plugin_sql::MigrationKind::Up,
     },

@@ -195,6 +195,16 @@ pub fn run() {
             ",
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 3,
+            description: "add_type_show_id_season_number",
+            sql: "
+                ALTER TABLE movies ADD COLUMN type TEXT NOT NULL DEFAULT 'MOVIE';
+                ALTER TABLE movies ADD COLUMN show_id TEXT;
+                ALTER TABLE movies ADD COLUMN season_number INTEGER;
+            ",
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

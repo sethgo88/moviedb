@@ -1,11 +1,24 @@
 # Android
 
+## Application IDs
+
+| Build type | Application ID | Launcher name |
+|---|---|---|
+| Debug / dev | `io.moviedb.app.dev` | MovieDB Dev |
+| Release | `io.moviedb.app` | MovieDB |
+
+The base ID (`io.moviedb.app`) is set in `src-tauri/tauri.conf.json`. The `.dev` suffix is appended via `applicationIdSuffix` in `build.gradle.kts`.
+
+**Why separate IDs?** Different application IDs allow both builds to be installed on the same device simultaneously. Use the dev build for day-to-day development and the release build to verify production behaviour without uninstalling.
+
+---
+
 ## Build Commands
 
 ```bash
 cargo tauri android dev              # hot-reload dev on connected device/emulator
-cargo tauri android build --debug    # debug APK
-cargo tauri android build --release  # signed release APK
+cargo tauri android build --debug    # debug APK  →  application ID: io.moviedb.app.dev
+cargo tauri android build --release  # signed release APK  →  application ID: io.moviedb.app
 ```
 
 Install a built APK:
@@ -123,7 +136,7 @@ When adding a new Tauri plugin, add its permission identifier here and update `l
 
 ## Signing
 
-Both debug and release builds are signed with the same keystore. This lets you swap between `cargo tauri android dev` and the installed release APK without uninstalling each time.
+Both debug and release builds are signed with the **same keystore**. This lets the two builds coexist on a device (different application IDs) and avoids `INSTALL_FAILED_UPDATE_INCOMPATIBLE` when switching between them.
 
 ### One-time setup
 
@@ -142,12 +155,7 @@ signing.keyPassword=<your password>
 
 4. `build.gradle.kts` reads from `local.properties` and applies the signing config to **both** debug and release build types. Never hardcode credentials in `build.gradle.kts`.
 
-### Switching between dev and release
-If Android refuses to install over the existing app with a signature mismatch, uninstall first:
-```bash
-adb uninstall io.moviedb.app
-```
-This only happens the first time after switching from the old auto-signed debug keystore.
+> **If you re-run `cargo tauri android init`:** `build.gradle.kts` is regenerated — re-apply the `applicationIdSuffix`, `resValue`, and signing blocks. `local.properties` is not touched.
 
 ---
 

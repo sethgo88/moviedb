@@ -8,7 +8,7 @@ Local-first SQLite, synced to self-hosted PocketBase, movie metadata from TMDB A
 
 ## Key Commands
 ```bash
-cargo tauri android dev
+cargo tauri android dev        # installs debug (io.moviedb.app.dev) — launch error is expected, tap app manually
 cargo tauri android build --debug
 cargo tauri android build --release
 pnpm lint          # biome check .

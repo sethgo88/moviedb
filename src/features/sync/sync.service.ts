@@ -199,6 +199,48 @@ export async function runSync(
 
 				if (pushedLocalIds.has(validated.local_id)) continue;
 
+				// Dedup: if a local row with a DIFFERENT id already represents this
+				// same TMDB content, the incoming record is a stray duplicate.
+				// Keep local, delete the duplicate from PocketBase, skip insert.
+				if (validated.tmdb_id) {
+					let dupeQuery: string;
+					let dupeParams: unknown[];
+
+					if (
+						validated.type === "TV_SEASON" &&
+						validated.season_number != null
+					) {
+						dupeQuery =
+							"SELECT id FROM movies WHERE tmdb_id = $1 AND season_number = $2 AND type = 'TV_SEASON' AND id != $3 AND deleted_at IS NULL LIMIT 1";
+						dupeParams = [
+							validated.tmdb_id,
+							validated.season_number,
+							validated.local_id,
+						];
+					} else {
+						dupeQuery =
+							"SELECT id FROM movies WHERE tmdb_id = $1 AND type = $2 AND id != $3 AND deleted_at IS NULL LIMIT 1";
+						dupeParams = [
+							validated.tmdb_id,
+							validated.type,
+							validated.local_id,
+						];
+					}
+
+					const dupeRows = await db.select<{ id: string }[]>(
+						dupeQuery,
+						dupeParams,
+					);
+					if (dupeRows.length > 0) {
+						try {
+							await pb.collection("movies").delete(record.id);
+						} catch {
+							// best-effort — stray record may already be gone
+						}
+						continue;
+					}
+				}
+
 				// If the remote poster is a TMDB URL, cache it locally via Rust
 				// before inserting so the WebView can display it without CORS issues.
 				let posterUrl = validated.poster_url;

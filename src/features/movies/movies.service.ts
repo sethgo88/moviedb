@@ -140,3 +140,36 @@ export async function hardDeleteMovie(id: string): Promise<void> {
 	const db = await getDb();
 	await db.execute("DELETE FROM movies WHERE id = $1", [id]);
 }
+
+export async function checkMovieDuplicate(tmdbId: number): Promise<boolean> {
+	const db = await getDb();
+	const rows = await db.select<{ count: number }[]>(
+		"SELECT COUNT(*) as count FROM movies WHERE tmdb_id = $1 AND type = 'MOVIE' AND deleted_at IS NULL",
+		[tmdbId],
+	);
+	return (rows[0]?.count ?? 0) > 0;
+}
+
+export async function checkSeasonDuplicate(
+	tmdbId: number,
+	seasonNumber: number,
+): Promise<boolean> {
+	const db = await getDb();
+	const rows = await db.select<{ count: number }[]>(
+		"SELECT COUNT(*) as count FROM movies WHERE tmdb_id = $1 AND season_number = $2 AND type = 'TV_SEASON' AND deleted_at IS NULL",
+		[tmdbId, seasonNumber],
+	);
+	return (rows[0]?.count ?? 0) > 0;
+}
+
+export async function checkTitleYearSimilar(
+	title: string,
+	year: number | null,
+): Promise<boolean> {
+	const db = await getDb();
+	const rows = await db.select<{ count: number }[]>(
+		"SELECT COUNT(*) as count FROM movies WHERE LOWER(title) = LOWER($1) AND (year = $2 OR ($2 IS NULL AND year IS NULL)) AND deleted_at IS NULL",
+		[title, year],
+	);
+	return (rows[0]?.count ?? 0) > 0;
+}

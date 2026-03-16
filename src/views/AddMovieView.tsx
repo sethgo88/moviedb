@@ -11,7 +11,12 @@ import { FormField } from "@/components/molecules/FormField/form-field";
 import { ToggleGroup } from "@/components/molecules/ToggleGroup/toggle-group";
 import { useCreateMovie } from "@/features/movies/movies.queries";
 import { NewMovieSchema } from "@/features/movies/movies.schema";
-import { getShowByTmdbId } from "@/features/movies/movies.service";
+import {
+	checkMovieDuplicate,
+	checkSeasonDuplicate,
+	checkTitleYearSimilar,
+	getShowByTmdbId,
+} from "@/features/movies/movies.service";
 import type { MovieFormat, MovieStatus } from "@/features/movies/movies.types";
 import { useTmdbSearch, useTmdbTvSearch } from "@/features/tmdb/tmdb.queries";
 import {
@@ -78,6 +83,9 @@ export function AddMovieView() {
 	const [titleQuery, setTitleQuery] = useState("");
 	const [isTitleFocused, setIsTitleFocused] = useState(false);
 	const [loadingId, setLoadingId] = useState<number | null>(null);
+
+	const [isDuplicate, setIsDuplicate] = useState(false);
+	const [isSimilar, setIsSimilar] = useState(false);
 
 	// TV-specific state
 	const [selectedShow, setSelectedShow] = useState<TmdbTvSearchResult | null>(
@@ -197,6 +205,8 @@ export function AddMovieView() {
 		setSelectedShow(null);
 		setSeasonNumber("");
 		setShowPosterUrl(null);
+		setIsDuplicate(false);
+		setIsSimilar(false);
 		form.reset();
 	}
 
@@ -223,6 +233,9 @@ export function AddMovieView() {
 		if (posterUrl) form.setFieldValue("poster_url", posterUrl);
 		setTitleQuery("");
 		setIsTitleFocused(false);
+		setIsSimilar(false);
+		const duplicate = await checkMovieDuplicate(result.id);
+		setIsDuplicate(duplicate);
 	}
 
 	async function handleSelectTvShow(result: TmdbTvSearchResult) {
@@ -250,6 +263,9 @@ export function AddMovieView() {
 		if (posterUrl) form.setFieldValue("poster_url", posterUrl);
 		setTitleQuery("");
 		setIsTitleFocused(false);
+		// Duplicate check deferred until season number is entered
+		setIsDuplicate(false);
+		setIsSimilar(false);
 	}
 
 	async function handleSeasonNumberBlur() {
@@ -270,6 +286,8 @@ export function AddMovieView() {
 			// leave poster as show-level poster
 		}
 		setIsFetchingSeasonPoster(false);
+		const duplicate = await checkSeasonDuplicate(selectedShow.id, n);
+		setIsDuplicate(duplicate);
 	}
 
 	const titlePlaceholder = mode === "MOVIE" ? "Movie title" : "Show title";
@@ -293,7 +311,7 @@ export function AddMovieView() {
 						<button
 							type="button"
 							className="font-semibold text-blue-400 disabled:opacity-40"
-							disabled={isSubmitting}
+							disabled={isSubmitting || isDuplicate}
 							onClick={form.handleSubmit}
 						>
 							{isSubmitting ? "Saving…" : "Add"}
@@ -329,6 +347,11 @@ export function AddMovieView() {
 					</div>
 
 					{/* Title with inline autocomplete */}
+					{isSimilar && (
+						<p className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-400">
+							A similar movie already exists
+						</p>
+					)}
 					<form.Field
 						name="title"
 						validators={{
@@ -346,7 +369,11 @@ export function AddMovieView() {
 						{(field) => (
 							<FormField
 								label="Title *"
-								error={field.state.meta.errors[0]?.toString()}
+								error={
+									isDuplicate
+										? "This is already in your collection"
+										: field.state.meta.errors[0]?.toString()
+								}
 							>
 								<div className="relative">
 									<input
@@ -356,13 +383,26 @@ export function AddMovieView() {
 										onChange={(e) => {
 											field.handleChange(e.target.value);
 											setTitleQuery(e.target.value);
+											// Reset duplicate/similar state when user types manually
+											setIsDuplicate(false);
+											setIsSimilar(false);
 											// Clear selected show if user edits the title in TV mode
 											if (mode === "TV") setSelectedShow(null);
 										}}
 										onFocus={() => setIsTitleFocused(true)}
-										onBlur={() => {
+										onBlur={async () => {
 											field.handleBlur();
 											setTimeout(() => setIsTitleFocused(false), 150);
+											// Only check similar for manual entries (no tmdb_id selected)
+											const tmdbId = form.getFieldValue("tmdb_id");
+											if (!tmdbId && field.state.value.trim()) {
+												const year = form.getFieldValue("year");
+												const similar = await checkTitleYearSimilar(
+													field.state.value.trim(),
+													year ? Number(year) : null,
+												);
+												setIsSimilar(similar);
+											}
 										}}
 									/>
 									{showDropdown && (

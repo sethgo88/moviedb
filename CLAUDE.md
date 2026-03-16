@@ -68,9 +68,7 @@ Single row: `last_synced_at TEXT` — null = never synced.
 - **Zod v4 + safeParse** — no zod-form-adapter; use `.safeParse()` directly in TanStack Form validators
 - **updated_at trigger** — never set from app layer on UPDATE; trigger maintains it
 - **Soft deletes** — `deleted_at` column; all reads filter `WHERE deleted_at IS NULL`
-- **Sync: last-write-wins** — newer `updated_at` wins; manual sync shows delete confirmation for pending soft-deletes
-- **PocketBase credentials** — stored in Tauri secure store, never hardcoded
-- **Poster caching** — custom posters as JPEG data URLs (base64); TMDB as direct HTTPS URLs. See `docs/database.md`.
+- **Sync: last-write-wins** — see `.claude/rules/sync.md` for full sync + poster caching rules
 
 ## Android
 - Bundle ID: `com.yourname.moviecollection`
@@ -110,15 +108,3 @@ GitHub Issues is the task management system for this project (repo: `sethgo88/mo
 5. If work reveals new tasks or edge cases, open new issues rather than expanding scope of the current one
 6. **After merging to `main`, always `git pull origin main` then `git push origin main`** to keep the remote in sync
 
-## Phase Status
-- [x] Phase 1: Environment Setup
-- [x] Phase 2: Project Scaffolding
-- [x] Phase 3: Android Target Configuration
-- [x] Phase 4: SQLite (migrations, service, queries)
-- [x] Phase 5: PocketBase Client & Sync Layer
-- [x] Phase 6: Router + Collection View + NavBar
-- [x] Phase 7: Add Movie (poster picker, form validation)
-- [x] Phase 8: Movie Detail + Edit Movie
-- [x] Phase 9: TMDB Integration
-- [x] Phase 10: Settings + Sync UI
-- [x] Phase 11: Polish & QA

@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod";
 import { getDb } from "../../lib/db";
 import {
@@ -172,4 +173,36 @@ export async function checkTitleYearSimilar(
 		[title, year],
 	);
 	return (rows[0]?.count ?? 0) > 0;
+}
+
+export async function exportCollectionAsJson(): Promise<void> {
+	const movies = await getAllMovies();
+	const content = JSON.stringify(movies, null, 2);
+	const today = new Date().toISOString().slice(0, 10);
+	await invoke("write_to_downloads", {
+		filename: `moviedb-export-${today}.json`,
+		content,
+	});
+}
+
+export async function exportCollectionAsCsv(): Promise<void> {
+	const movies = await getAllMovies();
+	const header = "title,year,format,status,tmdb_rating,personal_rating";
+	const rows = movies.map((m) => {
+		const cols = [
+			`"${m.title.replace(/"/g, '""')}"`,
+			m.year ?? "",
+			m.format,
+			m.status,
+			m.tmdb_rating ?? "",
+			m.personal_rating ?? "",
+		];
+		return cols.join(",");
+	});
+	const content = [header, ...rows].join("\n");
+	const today = new Date().toISOString().slice(0, 10);
+	await invoke("write_to_downloads", {
+		filename: `moviedb-export-${today}.csv`,
+		content,
+	});
 }

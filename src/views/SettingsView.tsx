@@ -1,7 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Toast } from "../components/atoms/Toast/toast";
 import { ConfirmSheet } from "../components/molecules/ConfirmSheet/confirm-sheet";
+import {
+	exportCollectionAsCsv,
+	exportCollectionAsJson,
+} from "../features/movies/movies.service";
 import {
 	clearPosterCache,
 	getPosterCacheSize,
@@ -18,6 +23,7 @@ function formatBytes(bytes: number): string {
 
 export function SettingsView() {
 	const queryClient = useQueryClient();
+	const navigate = useNavigate();
 
 	// PocketBase URL
 	const [pbUrl, setPbUrl] = useState(
@@ -73,6 +79,18 @@ export function SettingsView() {
 			);
 		},
 		onError: () => showToast("Failed to refresh posters", "error"),
+	});
+
+	const { mutate: doExportJson, isPending: isExportingJson } = useMutation({
+		mutationFn: exportCollectionAsJson,
+		onSuccess: () => showToast("Exported to Downloads"),
+		onError: () => showToast("Export failed", "error"),
+	});
+
+	const { mutate: doExportCsv, isPending: isExportingCsv } = useMutation({
+		mutationFn: exportCollectionAsCsv,
+		onSuccess: () => showToast("Exported to Downloads"),
+		onError: () => showToast("Export failed", "error"),
 	});
 
 	return (
@@ -162,6 +180,40 @@ export function SettingsView() {
 							onClick={() => setShowClearConfirm(true)}
 						>
 							Clear Poster Cache
+						</button>
+					</div>
+				</section>
+
+				{/* Collection */}
+				<section className="flex flex-col gap-3">
+					<h2 className="text-xs font-semibold uppercase tracking-widest text-white/40">
+						Collection
+					</h2>
+					<div className="rounded-2xl border border-white/10 bg-gray-900">
+						<button
+							type="button"
+							disabled={isExportingJson}
+							className="w-full px-4 py-3.5 text-left text-sm font-medium text-blue-400 transition-opacity active:opacity-70 disabled:opacity-40"
+							onClick={() => doExportJson()}
+						>
+							{isExportingJson ? "Exporting…" : "Export as JSON"}
+						</button>
+						<div className="h-px bg-white/10" />
+						<button
+							type="button"
+							disabled={isExportingCsv}
+							className="w-full px-4 py-3.5 text-left text-sm font-medium text-blue-400 transition-opacity active:opacity-70 disabled:opacity-40"
+							onClick={() => doExportCsv()}
+						>
+							{isExportingCsv ? "Exporting…" : "Export as CSV"}
+						</button>
+						<div className="h-px bg-white/10" />
+						<button
+							type="button"
+							className="w-full px-4 py-3.5 text-left text-sm font-medium text-blue-400 transition-opacity active:opacity-70"
+							onClick={() => navigate({ to: "/import" })}
+						>
+							Import from Jellyfin CSV
 						</button>
 					</div>
 				</section>

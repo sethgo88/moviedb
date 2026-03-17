@@ -85,6 +85,20 @@ fn get_poster_cache_size(app: tauri::AppHandle) -> Result<i64, String> {
     Ok(total as i64)
 }
 
+/// Write a text file to the device Downloads directory.
+#[tauri::command]
+async fn write_to_downloads(
+    app: tauri::AppHandle,
+    filename: String,
+    content: String,
+) -> Result<(), String> {
+    let download_dir = app.path().download_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&download_dir).map_err(|e| e.to_string())?;
+    let path = download_dir.join(&filename);
+    std::fs::write(&path, content.as_bytes()).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// Resize a picked image (already encoded as JPEG on the JS side) and
 /// persist it to the poster-cache directory.  The JS side does the canvas
 /// resize so all we receive here is the final JPEG bytes as base64.
@@ -222,6 +236,7 @@ pub fn run() {
             get_cached_poster,
             clear_poster_cache,
             get_poster_cache_size,
+            write_to_downloads,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

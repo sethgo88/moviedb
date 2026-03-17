@@ -26,6 +26,17 @@ export async function searchMovies(query: string): Promise<TmdbSearchResult[]> {
 	return data.results;
 }
 
+export async function searchMovieByTitleYear(
+	title: string,
+	year: number,
+): Promise<TmdbSearchResult[]> {
+	const url = `${TMDB_BASE}/search/movie?query=${encodeURIComponent(title)}&primary_release_year=${year}&api_key=${TMDB_API_KEY}&language=en-US&page=1`;
+	const res = await fetch(url);
+	if (!res.ok) throw new Error(`TMDB error: ${res.status}`);
+	const data = TmdbSearchResponseSchema.parse(await res.json());
+	return data.results;
+}
+
 /**
  * Fetch and cache a TMDB poster via Rust (reqwest — no CORS restriction).
  * Checks the local poster-cache first; downloads only if not cached.

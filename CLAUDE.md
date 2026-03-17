@@ -106,5 +106,5 @@ GitHub Issues is the task management system for this project (repo: `sethgo88/mo
 3. Reference the issue number in every commit message (e.g. `feat: add poster cache, closes #14`)
 4. When a task is complete, close the issue and leave a brief comment summarising what was done
 5. If work reveals new tasks or edge cases, open new issues rather than expanding scope of the current one
-6. **After merging to `main`, always `git pull origin main` then `git push origin main`** to keep the remote in sync
+6. **After merging to `master`, always `git pull origin master` then `git push origin master`** to keep the remote in sync
 

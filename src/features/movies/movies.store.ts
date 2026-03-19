@@ -11,7 +11,6 @@ interface MoviesState {
 	physicalFilter: boolean | null;
 	digitalFilter: boolean | null;
 	sortBy: SortOption;
-	selectedMovieId: string | null;
 	setSearch: (q: string) => void;
 	setTypeFilter: (t: TypeFilter | null) => void;
 	setStatusFilter: (s: MovieStatus | null) => void;
@@ -19,7 +18,6 @@ interface MoviesState {
 	setPhysicalFilter: (v: boolean | null) => void;
 	setDigitalFilter: (v: boolean | null) => void;
 	setSortBy: (s: SortOption) => void;
-	setSelectedMovieId: (id: string | null) => void;
 	clearFilters: () => void;
 }
 
@@ -31,7 +29,6 @@ export const useMoviesStore = create<MoviesState>()((set) => ({
 	physicalFilter: null,
 	digitalFilter: null,
 	sortBy: "title_asc",
-	selectedMovieId: null,
 	setSearch: (q) => set({ search: q }),
 	setTypeFilter: (t) => set({ typeFilter: t }),
 	setStatusFilter: (s) => set({ statusFilter: s }),
@@ -39,7 +36,6 @@ export const useMoviesStore = create<MoviesState>()((set) => ({
 	setPhysicalFilter: (v) => set({ physicalFilter: v }),
 	setDigitalFilter: (v) => set({ digitalFilter: v }),
 	setSortBy: (s) => set({ sortBy: s }),
-	setSelectedMovieId: (id) => set({ selectedMovieId: id }),
 	// Sort is intentionally preserved when clearing filters
 	clearFilters: () =>
 		set({

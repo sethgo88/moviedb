@@ -66,21 +66,15 @@ export function PosterPicker({
 		});
 		if (!selected || typeof selected !== "string") return;
 
-		console.log("[PosterPicker] selected path:", selected);
-
 		setIsLoading(true);
 		try {
 			const bytes = await readFile(selected);
-			console.log("[PosterPicker] bytes read:", bytes.length);
-
 			const detected = detectImageType(bytes);
-			console.log("[PosterPicker] detected type:", detected);
 
 			if (!detected) {
 				const header = Array.from(bytes.slice(0, 4))
 					.map((b) => b.toString(16).padStart(2, "0"))
 					.join(" ");
-				console.error("[PosterPicker] unrecognised file header:", header);
 				setError(
 					`Unsupported format (header: ${header}). Use JPG, PNG, or WebP.`,
 				);
@@ -89,30 +83,14 @@ export function PosterPicker({
 
 			const blob = new Blob([bytes], { type: detected.mime });
 			const blobUrl = URL.createObjectURL(blob);
-			console.log(
-				"[PosterPicker] blob created — mime:",
-				detected.mime,
-				"size:",
-				blob.size,
-			);
 
 			const img = new Image();
 			await new Promise<void>((res, rej) => {
-				img.onload = () => {
-					console.log(
-						"[PosterPicker] image loaded:",
-						img.naturalWidth,
-						"x",
-						img.naturalHeight,
-					);
-					res();
-				};
-				img.onerror = (e) => {
-					console.error("[PosterPicker] image load error:", e);
+				img.onload = () => res();
+				img.onerror = () =>
 					rej(
 						new Error(`Browser could not decode the ${detected.label} image`),
 					);
-				};
 				img.src = blobUrl;
 			});
 			URL.revokeObjectURL(blobUrl);
@@ -120,12 +98,6 @@ export function PosterPicker({
 			const canvas = document.createElement("canvas");
 			canvas.width = 185;
 			canvas.height = Math.round((img.naturalHeight * 185) / img.naturalWidth);
-			console.log(
-				"[PosterPicker] canvas size:",
-				canvas.width,
-				"x",
-				canvas.height,
-			);
 
 			const ctx = canvas.getContext("2d");
 			if (!ctx) throw new Error("Canvas not available");
@@ -135,13 +107,10 @@ export function PosterPicker({
 			// The Tauri asset protocol cannot serve runtime-written files on Android,
 			// so we store the data URL instead of a file path for custom posters.
 			const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-			console.log("[PosterPicker] dataUrl length:", dataUrl.length);
 
 			onChange(dataUrl);
 		} catch (e) {
-			const message = e instanceof Error ? e.message : String(e);
-			console.error("[PosterPicker] error:", message);
-			setError(message);
+			setError(e instanceof Error ? e.message : String(e));
 		} finally {
 			setIsLoading(false);
 		}

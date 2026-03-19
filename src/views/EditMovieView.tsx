@@ -65,6 +65,7 @@ export function EditMovieView() {
 			<MovieForm
 				title="Edit Movie"
 				submitLabel="Save"
+				isEditMode
 				initialValues={initialValues}
 				onCancel={() => navigate({ to: "/" })}
 				onSubmit={handleSubmit}

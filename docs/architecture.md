@@ -55,12 +55,11 @@ React-free singletons and utilities:
 - `db.ts` — typed wrapper around `@tauri-apps/plugin-sql`
 - `pocketbase.ts` — configured PocketBase client
 - `cn.ts` — Tailwind class merging utility
-- `date.ts` — ISO 8601 helpers
 
 ### `src-tauri/src/`
 Rust backend. Currently handles:
 - SQLite plugin registration and migrations (v1: initial schema, v2: personal_rating REAL)
-- `save_custom_poster` — decodes base64 JPEG and saves to poster-cache directory
+- `save_custom_poster` — receives a base64 JPEG data URL from JS; currently unused (custom posters are stored as data URLs directly in `poster_url`)
 - `cache_poster(tmdb_id, url)` — fetches TMDB poster via reqwest, saves to poster-cache, returns data URL
 - `get_cached_poster(tmdb_id)` — returns cached poster as data URL or null
 - `clear_poster_cache()` — deletes all files in poster-cache/ (used by Settings)
@@ -79,8 +78,7 @@ Rust backend. Currently handles:
 ```
 User fills AddMovieView form (TanStack Form)
         ↓
-[Optional] PosterPicker: pick image → Canvas resize 185px wide
-        → invoke save_custom_poster → poster-cache/custom_{uuid}_w185.jpg
+[Optional] PosterPicker: pick image → Canvas resize 185px wide → JPEG data URL stored in poster_url
         ↓
 form.handleSubmit() → NewMovieSchema.parse() → useCreateMovie mutation
         ↓

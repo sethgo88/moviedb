@@ -184,20 +184,12 @@ Pending soft deletes exist?
 
 ---
 
-## Poster Cache
+## Poster Storage
 
-Posters are stored in `{appDataDir}/poster-cache/` at w185 size (~35KB each). Two flows:
+Two poster sources, both stored in `poster_url`:
 
-### Custom posters (manual entry — implemented)
-`PosterPicker` atom → user picks image → Canvas resize to 185px wide → JPEG encode → `save_custom_poster` Tauri command → `poster-cache/custom_{uuid}_w185.jpg`. Path stored in `poster_url`. Displayed via `convertFileSrc(poster_url)`.
+### Custom posters (file picker)
+`PosterPicker` → user picks image → Canvas resize to 185px wide → `canvas.toDataURL("image/jpeg", 0.85)` → JPEG data URL stored directly in `poster_url`. The Tauri asset protocol cannot serve runtime-written files on Android, so data URLs are used instead of file paths.
 
-### TMDB posters (Phase 9 — not yet implemented)
-| Command | Description |
-|---|---|
-| `save_custom_poster(base64_data)` | Saves pre-resized JPEG from JS, returns absolute path |
-| `cache_poster(tmdbId, url)` | Fetch TMDB w185 URL, write to `poster-cache/{tmdbId}_w185.jpg` |
-| `get_cached_poster(tmdbId)` | Return local path if < 30 days old, else `null` |
-| `clear_poster_cache()` | Delete all files in `poster-cache/` |
-| `get_poster_cache_size()` | Return total bytes |
-
-Cache limits (Phase 9): 100MB max, 30-day TTL per file, LRU eviction.
+### TMDB posters
+Stored as direct HTTPS URLs (`https://image.tmdb.org/t/p/w185/...`). The WebView loads them as `<img src>` like any other network image. No local caching is implemented.

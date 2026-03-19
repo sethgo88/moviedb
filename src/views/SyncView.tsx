@@ -1,3 +1,4 @@
+import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { RefreshCw } from "lucide-react";
 import { useState } from "react";
@@ -47,26 +48,24 @@ function NotConfiguredState() {
 function LoginForm({ onSuccess }: { onSuccess: () => void }) {
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
-	const [isLoading, setIsLoading] = useState(false);
-	const [error, setError] = useState<string | null>(null);
+	const {
+		mutate: login,
+		isPending: isLoading,
+		error: loginError,
+	} = useMutation({
+		mutationFn: ({ em, pw }: { em: string; pw: string }) => loginPb(em, pw),
+		onSuccess,
+	});
+	const error =
+		loginError instanceof Error
+			? loginError.message
+			: loginError
+				? "Login failed. Check your credentials."
+				: null;
 
-	async function handleLogin() {
+	function handleLogin() {
 		if (!email.trim() || !password) return;
-		setIsLoading(true);
-		setError(null);
-		try {
-			await loginPb(email.trim(), password);
-			onSuccess();
-		} catch (e) {
-			console.error("[SyncView] login failed:", e);
-			setError(
-				e instanceof Error
-					? e.message
-					: "Login failed. Check your credentials.",
-			);
-		} finally {
-			setIsLoading(false);
-		}
+		login({ em: email.trim(), pw: password });
 	}
 
 	return (

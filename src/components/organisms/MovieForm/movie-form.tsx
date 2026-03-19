@@ -58,6 +58,7 @@ export interface MovieFormValues {
 interface MovieFormProps {
 	title: string;
 	submitLabel: string;
+	isEditMode?: boolean;
 	initialValues?: Partial<MovieFormValues>;
 	onCancel: () => void;
 	onSubmit: (values: MovieFormValues) => Promise<void>;
@@ -80,6 +81,7 @@ const DEFAULTS: MovieFormValues = {
 export function MovieForm({
 	title,
 	submitLabel,
+	isEditMode,
 	initialValues,
 	onCancel,
 	onSubmit,
@@ -113,7 +115,7 @@ export function MovieForm({
 		withResolver: true,
 	});
 
-	if (submitLabel === "Save") {
+	if (isEditMode) {
 		if (isLoading) return <Spinner />;
 		if (!movie) {
 			return (

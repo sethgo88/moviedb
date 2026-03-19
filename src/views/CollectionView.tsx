@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { TvMinimalPlay } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { Button } from "../components/atoms/Button/button";
 import { Spinner } from "../components/atoms/Spinner/spinner";
 import { SearchBar } from "../components/molecules/SearchBar/search-bar";
@@ -92,6 +93,7 @@ export function CollectionView() {
 		setPhysicalFilter,
 		setDigitalFilter,
 		setSortBy,
+		setCollectionScrollY,
 		clearFilters,
 	} = useMoviesStore();
 	const debouncedSearch = useDebounce(search);
@@ -106,6 +108,28 @@ export function CollectionView() {
 	} = usePullToRefresh({
 		onRefresh: () => queryClient.invalidateQueries({ queryKey: ["movies"] }),
 	});
+
+	const scrollDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	// Restore scroll position after data loads.
+	// Read from store imperatively so this effect only fires on isLoading transitions,
+	// not on every scroll save (which would fight the user).
+	// biome-ignore lint/correctness/useExhaustiveDependencies: containerRef is a stable ref — .current is intentionally omitted
+	useEffect(() => {
+		if (!isLoading && containerRef.current) {
+			const savedY = useMoviesStore.getState().collectionScrollY;
+			if (savedY > 0) containerRef.current.scrollTop = savedY;
+		}
+	}, [isLoading]);
+
+	function handleScroll() {
+		if (scrollDebounceRef.current) clearTimeout(scrollDebounceRef.current);
+		scrollDebounceRef.current = setTimeout(() => {
+			if (containerRef.current) {
+				setCollectionScrollY(containerRef.current.scrollTop);
+			}
+		}, 150);
+	}
 
 	const hasFilters =
 		typeFilter !== null ||
@@ -266,6 +290,7 @@ export function CollectionView() {
 			<div
 				ref={containerRef}
 				className="flex-1 overflow-y-auto"
+				onScroll={handleScroll}
 				onTouchStart={onTouchStart}
 				onTouchMove={onTouchMove}
 				onTouchEnd={onTouchEnd}

@@ -11,6 +11,7 @@ interface MoviesState {
 	physicalFilter: boolean | null;
 	digitalFilter: boolean | null;
 	sortBy: SortOption;
+	collectionScrollY: number;
 	setSearch: (q: string) => void;
 	setTypeFilter: (t: TypeFilter | null) => void;
 	setStatusFilter: (s: MovieStatus | null) => void;
@@ -18,6 +19,7 @@ interface MoviesState {
 	setPhysicalFilter: (v: boolean | null) => void;
 	setDigitalFilter: (v: boolean | null) => void;
 	setSortBy: (s: SortOption) => void;
+	setCollectionScrollY: (y: number) => void;
 	clearFilters: () => void;
 }
 
@@ -29,13 +31,15 @@ export const useMoviesStore = create<MoviesState>()((set) => ({
 	physicalFilter: null,
 	digitalFilter: null,
 	sortBy: "title_asc",
-	setSearch: (q) => set({ search: q }),
-	setTypeFilter: (t) => set({ typeFilter: t }),
-	setStatusFilter: (s) => set({ statusFilter: s }),
-	setFormatFilter: (f) => set({ formatFilter: f }),
-	setPhysicalFilter: (v) => set({ physicalFilter: v }),
-	setDigitalFilter: (v) => set({ digitalFilter: v }),
-	setSortBy: (s) => set({ sortBy: s }),
+	collectionScrollY: 0,
+	setSearch: (q) => set({ search: q, collectionScrollY: 0 }),
+	setTypeFilter: (t) => set({ typeFilter: t, collectionScrollY: 0 }),
+	setStatusFilter: (s) => set({ statusFilter: s, collectionScrollY: 0 }),
+	setFormatFilter: (f) => set({ formatFilter: f, collectionScrollY: 0 }),
+	setPhysicalFilter: (v) => set({ physicalFilter: v, collectionScrollY: 0 }),
+	setDigitalFilter: (v) => set({ digitalFilter: v, collectionScrollY: 0 }),
+	setSortBy: (s) => set({ sortBy: s, collectionScrollY: 0 }),
+	setCollectionScrollY: (y) => set({ collectionScrollY: y }),
 	// Sort is intentionally preserved when clearing filters
 	clearFilters: () =>
 		set({
@@ -45,5 +49,6 @@ export const useMoviesStore = create<MoviesState>()((set) => ({
 			formatFilter: null,
 			physicalFilter: null,
 			digitalFilter: null,
+			collectionScrollY: 0,
 		}),
 }));

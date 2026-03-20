@@ -41,8 +41,6 @@ android {
     }
     buildTypes {
         getByName("debug") {
-            applicationIdSuffix = ".dev"
-            resValue("string", "app_name", "MovieDB Dev")
             signingConfig = signingConfigs.getByName("release")
             manifestPlaceholders["usesCleartextTraffic"] = "true"
             isDebuggable = true

@@ -9,6 +9,14 @@
 		"sql:default",
 		"sql:allow-execute",
 		"dialog:allow-open",
-		"fs:allow-read-file"
+		"fs:allow-read-file",
+		"http:default",
+		{
+			"identifier": "http:allow-fetch",
+			"allow": [
+				{ "url": "http://*:*/**" },
+				{ "url": "https://*:*/**" }
+			]
+		}
 	]
 }

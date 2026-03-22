@@ -2,6 +2,8 @@ import {
 	checkMovieDuplicate,
 	checkTitleYearSimilar,
 	createMovie,
+	getMovieByTmdbId,
+	updateMovie,
 } from "../movies/movies.service";
 import type { MovieFormat } from "../movies/movies.types";
 import {
@@ -55,24 +57,40 @@ export async function processImportRows(
 
 		let status: ImportRow["status"];
 		let selectedMatch: ImportRow["selectedMatch"] = null;
+		let existingMovieId: string | null = null;
+		let existingFormat: ImportRow["existingFormat"] = null;
 
 		if (matches.length === 0) {
 			const isDup = await checkTitleYearSimilar(raw.title, raw.year);
 			status = isDup ? "duplicate" : "not_found";
 		} else if (matches.length === 1) {
 			const isDup = await checkMovieDuplicate(matches[0].id);
-			status = isDup ? "duplicate" : "ready";
+			if (isDup) {
+				status = "duplicate";
+				const existing = await getMovieByTmdbId(matches[0].id);
+				existingMovieId = existing?.id ?? null;
+				existingFormat = existing?.format ?? null;
+			} else {
+				status = "ready";
+			}
 			selectedMatch = matches[0];
 		} else {
 			// Multiple matches — check if the top result is already in collection
 			const isDup = await checkMovieDuplicate(matches[0].id);
 			if (isDup) {
 				status = "duplicate";
+				const existing = await getMovieByTmdbId(matches[0].id);
+				existingMovieId = existing?.id ?? null;
+				existingFormat = existing?.format ?? null;
 			} else {
 				status = "ambiguous";
 			}
 			selectedMatch = matches[0];
 		}
+
+		// Auto-update quality mismatches; skip if quality is unchanged
+		const isQualityMismatch =
+			existingMovieId !== null && existingFormat !== format;
 
 		results.push({
 			raw,
@@ -80,7 +98,9 @@ export async function processImportRows(
 			status,
 			tmdbMatches: matches,
 			selectedMatch,
-			skip: status === "duplicate",
+			skip: status === "duplicate" && !isQualityMismatch,
+			existingMovieId,
+			existingFormat,
 		});
 
 		onProgress(i + 1, rows.length);
@@ -96,13 +116,21 @@ export async function processImportRows(
 
 export async function executeImport(
 	rows: ImportRow[],
-): Promise<{ imported: number; skipped: number }> {
+): Promise<{ imported: number; updated: number; skipped: number }> {
 	let imported = 0;
+	let updated = 0;
 	let skipped = 0;
 
 	for (const row of rows) {
 		if (row.skip) {
 			skipped++;
+			continue;
+		}
+
+		// Quality update for an existing movie
+		if (row.existingMovieId !== null && row.existingFormat !== row.format) {
+			await updateMovie(row.existingMovieId, { format: row.format });
+			updated++;
 			continue;
 		}
 
@@ -143,5 +171,5 @@ export async function executeImport(
 		imported++;
 	}
 
-	return { imported, skipped };
+	return { imported, updated, skipped };
 }

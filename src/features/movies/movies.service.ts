@@ -69,6 +69,16 @@ export async function createMovie(data: NewMovie): Promise<Movie> {
 	return created;
 }
 
+export async function getMovieByTmdbId(tmdbId: number): Promise<Movie | null> {
+	const db = await getDb();
+	const rows = await db.select(
+		"SELECT * FROM movies WHERE tmdb_id = $1 AND type = 'MOVIE' AND deleted_at IS NULL LIMIT 1",
+		[tmdbId],
+	);
+	const results = z.array(MovieSchema).parse(rows);
+	return results[0] ?? null;
+}
+
 export async function getShowByTmdbId(tmdbId: number): Promise<Movie | null> {
 	const db = await getDb();
 	const rows = await db.select(

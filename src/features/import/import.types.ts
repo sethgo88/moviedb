@@ -21,4 +21,6 @@ export type ImportRow = {
 	tmdbMatches: TmdbSearchResult[];
 	selectedMatch: TmdbSearchResult | null;
 	skip: boolean;
+	existingMovieId: string | null;
+	existingFormat: MovieFormat | null;
 };

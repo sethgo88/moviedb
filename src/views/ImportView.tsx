@@ -74,11 +74,13 @@ export function ImportView() {
 	async function handleConfirm() {
 		setIsImporting(true);
 		try {
-			const { imported, skipped } = await executeImport(rows);
+			const { imported, updated, skipped } = await executeImport(rows);
 			await queryClient.invalidateQueries({ queryKey: ["movies"] });
-			showToast(
-				`Imported ${imported} movie${imported === 1 ? "" : "s"}${skipped > 0 ? `, skipped ${skipped}` : ""}`,
-			);
+			const parts = [];
+			if (imported > 0) parts.push(`Imported ${imported} movie${imported === 1 ? "" : "s"}`);
+			if (updated > 0) parts.push(`updated ${updated} quality`);
+			if (skipped > 0) parts.push(`skipped ${skipped}`);
+			showToast(parts.join(", "));
 			setTimeout(() => navigate({ to: "/" }), 1500);
 		} catch {
 			showToast("Import failed", "error");
@@ -290,41 +292,59 @@ export function ImportView() {
 										No duplicates
 									</li>
 								)}
-								{duplicateRows.map(({ row, index }) => (
-									<li key={index} className="flex items-center gap-3 p-4">
-										{row.selectedMatch?.poster_path ? (
-											<img
-												src={`${TMDB_POSTER_BASE}${row.selectedMatch.poster_path}`}
-												alt=""
-												className="h-16 w-11 shrink-0 rounded object-cover"
-											/>
-										) : (
-											<div className="h-16 w-11 shrink-0 rounded bg-white/10" />
-										)}
-										<div className="min-w-0 flex-1">
-											<p className="truncate text-sm font-medium">
-												{row.selectedMatch?.title ?? row.raw.title}
-											</p>
-											<p className="text-xs text-white/40">
-												{row.raw.year} · {row.format}
-											</p>
-											<p className="mt-0.5 text-xs text-white/30">
-												Already in collection
-											</p>
-										</div>
-										<button
-											type="button"
-											className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-												row.skip
-													? "bg-white/10 text-white/40"
-													: "bg-blue-600 text-white"
-											}`}
-											onClick={() => toggleSkip(index)}
-										>
-											{row.skip ? "Skip" : "Add"}
-										</button>
-									</li>
-								))}
+								{duplicateRows.map(({ row, index }) => {
+									const isQualityUpdate =
+										row.existingMovieId !== null &&
+										row.existingFormat !== null &&
+										row.existingFormat !== row.format;
+									return (
+										<li key={index} className="flex items-center gap-3 p-4">
+											{row.selectedMatch?.poster_path ? (
+												<img
+													src={`${TMDB_POSTER_BASE}${row.selectedMatch.poster_path}`}
+													alt=""
+													className="h-16 w-11 shrink-0 rounded object-cover"
+												/>
+											) : (
+												<div className="h-16 w-11 shrink-0 rounded bg-white/10" />
+											)}
+											<div className="min-w-0 flex-1">
+												<p className="truncate text-sm font-medium">
+													{row.selectedMatch?.title ?? row.raw.title}
+												</p>
+												{isQualityUpdate ? (
+													<p className="text-xs text-amber-400">
+														{row.raw.year} · {row.existingFormat} → {row.format}
+													</p>
+												) : (
+													<p className="text-xs text-white/40">
+														{row.raw.year} · {row.format}
+													</p>
+												)}
+												<p className="mt-0.5 text-xs text-white/30">
+													{isQualityUpdate
+														? "Quality upgrade available"
+														: "Already in collection"}
+												</p>
+											</div>
+											<button
+												type="button"
+												className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+													row.skip
+														? "bg-white/10 text-white/40"
+														: "bg-blue-600 text-white"
+												}`}
+												onClick={() => toggleSkip(index)}
+											>
+												{row.skip
+													? "Skip"
+													: isQualityUpdate
+														? "Update"
+														: "Add"}
+											</button>
+										</li>
+									);
+								})}
 							</ul>
 						)}
 

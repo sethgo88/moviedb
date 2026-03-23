@@ -131,12 +131,14 @@ function SyncControls({ onLogout }: { onLogout: () => void }) {
 		}
 		runSync(false, {
 			onSuccess: (result) => {
-				const parts = [];
-				if (result.pushed > 0) parts.push(`↑ ${result.pushed}`);
-				if (result.pulled > 0) parts.push(`↓ ${result.pulled}`);
+				const total =
+					result.pushedMovies.length +
+					result.pulledMovies.length +
+					result.deletedMovies.length +
+					result.dedupedMovies.length;
 				showToast(
-					parts.length > 0
-						? `Synced — ${parts.join("  ")}`
+					total > 0
+						? `Synced ${total} item${total === 1 ? "" : "s"}`
 						: "Already up to date",
 				);
 			},
@@ -150,12 +152,14 @@ function SyncControls({ onLogout }: { onLogout: () => void }) {
 		setShowDeleteConfirm(false);
 		runSync(true, {
 			onSuccess: (result) => {
-				const parts = [];
-				if (result.pushed > 0) parts.push(`↑ ${result.pushed}`);
-				if (result.pulled > 0) parts.push(`↓ ${result.pulled}`);
+				const total =
+					result.pushedMovies.length +
+					result.pulledMovies.length +
+					result.deletedMovies.length +
+					result.dedupedMovies.length;
 				showToast(
-					parts.length > 0
-						? `Synced — ${parts.join("  ")}`
+					total > 0
+						? `Synced ${total} item${total === 1 ? "" : "s"}`
 						: "Already up to date",
 				);
 			},
@@ -164,6 +168,14 @@ function SyncControls({ onLogout }: { onLogout: () => void }) {
 			},
 		});
 	}
+
+	const hasAnyResult =
+		syncResult &&
+		(syncResult.pulledMovies.length > 0 ||
+			syncResult.pushedMovies.length > 0 ||
+			syncResult.deletedMovies.length > 0 ||
+			syncResult.dedupedMovies.length > 0 ||
+			syncResult.errors.length > 0);
 
 	return (
 		<div className="flex flex-col gap-4">
@@ -221,38 +233,94 @@ function SyncControls({ onLogout }: { onLogout: () => void }) {
 					</>
 				)}
 
-				{/* Last sync result */}
+				{/* Last sync result — stacked lists */}
 				{syncResult && !isSyncing && (
 					<>
-						<div className="h-px bg-white/10" />
-						<div className="flex gap-6 px-4 py-3">
-							<div className="text-center">
-								<p className="text-sm font-semibold text-white">
-									{syncResult.pushed}
-								</p>
-								<p className="text-xs text-white/40">Pushed</p>
-							</div>
-							<div className="text-center">
-								<p className="text-sm font-semibold text-white">
-									{syncResult.pulled}
-								</p>
-								<p className="text-xs text-white/40">Pulled</p>
-							</div>
-							{syncResult.errors.length > 0 && (
-								<div className="text-center">
-									<p className="text-sm font-semibold text-red-400">
-										{syncResult.errors.length}
+						{syncResult.pulledMovies.length > 0 && (
+							<>
+								<div className="h-px bg-white/10" />
+								<div className="px-4 py-3">
+									<p className="mb-2 text-xs font-semibold text-blue-400">
+										↓ Pulled ({syncResult.pulledMovies.length})
 									</p>
-									<p className="text-xs text-white/40">Errors</p>
+									<div className="flex flex-col gap-1">
+										{syncResult.pulledMovies.map((m) => (
+											<p key={m.id} className="text-xs text-white/70">
+												{m.title}
+											</p>
+										))}
+									</div>
 								</div>
-							)}
-						</div>
+							</>
+						)}
+						{syncResult.pushedMovies.length > 0 && (
+							<>
+								<div className="h-px bg-white/10" />
+								<div className="px-4 py-3">
+									<p className="mb-2 text-xs font-semibold text-green-400">
+										↑ Pushed ({syncResult.pushedMovies.length})
+									</p>
+									<div className="flex flex-col gap-1">
+										{syncResult.pushedMovies.map((m) => (
+											<p key={m.id} className="text-xs text-white/70">
+												{m.title}
+											</p>
+										))}
+									</div>
+								</div>
+							</>
+						)}
+						{syncResult.deletedMovies.length > 0 && (
+							<>
+								<div className="h-px bg-white/10" />
+								<div className="px-4 py-3">
+									<p className="mb-2 text-xs font-semibold text-red-400">
+										✕ Deleted ({syncResult.deletedMovies.length})
+									</p>
+									<div className="flex flex-col gap-1">
+										{syncResult.deletedMovies.map((m) => (
+											<p key={m.id} className="text-xs text-white/70">
+												{m.title}
+											</p>
+										))}
+									</div>
+								</div>
+							</>
+						)}
+						{syncResult.dedupedMovies.length > 0 && (
+							<>
+								<div className="h-px bg-white/10" />
+								<div className="px-4 py-3">
+									<p className="mb-2 text-xs font-semibold text-yellow-400">
+										~ Deduped ({syncResult.dedupedMovies.length})
+									</p>
+									<div className="flex flex-col gap-1">
+										{syncResult.dedupedMovies.map((m) => (
+											<p key={m.id} className="text-xs text-white/70">
+												{m.title}
+											</p>
+										))}
+									</div>
+								</div>
+							</>
+						)}
+						{!hasAnyResult && (
+							<>
+								<div className="h-px bg-white/10" />
+								<p className="px-4 py-3 text-xs text-white/40">
+									Already up to date
+								</p>
+							</>
+						)}
 						{syncResult.errors.length > 0 && (
 							<>
 								<div className="h-px bg-white/10" />
 								<div className="flex flex-col gap-1 px-4 py-3">
+									<p className="mb-1 text-xs font-semibold text-red-400">
+										Errors ({syncResult.errors.length})
+									</p>
 									{syncResult.errors.map((err) => (
-										<p key={err} className="text-xs text-red-400">
+										<p key={err} className="text-xs text-red-400/70">
 											{err}
 										</p>
 									))}

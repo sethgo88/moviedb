@@ -103,7 +103,7 @@ GitHub Issues is the task management system for this project (repo: `sethgo88/mo
 ### Workflow
 1. Before starting any new work, run `list issues` to check open issues and current priorities
 2. Never start work without a corresponding issue — create one first if it doesn't exist
-3. **Before touching any file, create or checkout the branch for the issue.** Run `git branch --show-current`; if on `master`, run `git checkout -b feat/<description>` (or `fix/`, `phase/` as appropriate). If a branch for the issue already exists, check it out instead.
+3. **Before touching any file, create or checkout the branch for the issue.** Run `git branch --show-current`; if on `master`, run `git new feat/<description>` (or `fix/`, `phase/` as appropriate). If a branch for the issue already exists, check it out instead.
 4. Reference the issue number in every commit message (e.g. `feat: add poster cache, closes #14`)
 5. When a task is complete, close the issue and leave a brief comment summarising what was done
 6. If work reveals new tasks or edge cases, open new issues rather than expanding scope of the current one

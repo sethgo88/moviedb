@@ -63,8 +63,10 @@ export async function runSync(
 	const syncStartedAt = new Date().toISOString();
 
 	const errors: string[] = [];
-	let pushed = 0;
-	let pulled = 0;
+	const pushedMovies: { id: string; title: string }[] = [];
+	const pulledMovies: { id: string; title: string }[] = [];
+	const deletedMovies: { id: string; title: string }[] = [];
+	const dedupedMovies: { id: string; title: string }[] = [];
 
 	try {
 		const pb = getPb();
@@ -88,8 +90,8 @@ export async function runSync(
 
 		// --- PUSH DELETES ---
 		if (pendingCount > 0) {
-			const softDeleted = await db.select<{ id: string }[]>(
-				"SELECT id FROM movies WHERE deleted_at IS NOT NULL",
+			const softDeleted = await db.select<{ id: string; title: string }[]>(
+				"SELECT id, title FROM movies WHERE deleted_at IS NOT NULL",
 			);
 
 			for (const row of softDeleted) {
@@ -104,11 +106,66 @@ export async function runSync(
 					}
 
 					await db.execute("DELETE FROM movies WHERE id = $1", [row.id]);
+					deletedMovies.push({ id: row.id, title: row.title });
 				} catch (e) {
 					const msg = `Failed to delete movie ${row.id}: ${String(e)}`;
 					console.error("[sync] delete error:", msg, e);
 					errors.push(msg);
 				}
+			}
+		}
+
+		// Build the PocketBase id map early so we can use it during local dedup.
+		const allPbRecords = await pb.collection("movies").getFullList();
+		const pbIdMap = new Map(
+			allPbRecords.map((r) => [r.local_id as string, r.id]),
+		);
+
+		// --- LOCAL DEDUP ---
+		// If the same TMDB title was ever added twice (different UUIDs), the pull
+		// dedup treats each as a stray of the other and deletes both PB records
+		// every pull cycle, causing an endless push-every-other-sync loop.
+		// Fix: before pushing, find (tmdb_id, type, season_number) groups with
+		// more than one active local record, keep the most-recently-updated one,
+		// and hard-delete the rest from both SQLite and PocketBase.
+		const dupeGroups = await db.select<
+			{ tmdb_id: number; type: string; sn: number }[]
+		>(
+			`SELECT tmdb_id, type, COALESCE(season_number, -1) AS sn
+			 FROM movies
+			 WHERE deleted_at IS NULL AND tmdb_id IS NOT NULL
+			 GROUP BY tmdb_id, type, COALESCE(season_number, -1)
+			 HAVING COUNT(*) > 1`,
+		);
+
+		for (const group of dupeGroups) {
+			const members = await db.select<
+				{ id: string; title: string; updated_at: string }[]
+			>(
+				`SELECT id, title, updated_at FROM movies
+				 WHERE tmdb_id = $1 AND type = $2
+				   AND COALESCE(season_number, -1) = $3
+				   AND deleted_at IS NULL
+				 ORDER BY updated_at DESC, id ASC`,
+				[group.tmdb_id, group.type, group.sn],
+			);
+			// First row is the keeper (latest updated_at); delete the rest.
+			const [, ...strays] = members;
+			for (const stray of strays) {
+				const pbId = pbIdMap.get(stray.id);
+				if (pbId) {
+					try {
+						await pb.collection("movies").delete(pbId);
+					} catch {
+						// best-effort — may already be gone
+					}
+					pbIdMap.delete(stray.id);
+				}
+				await db.execute("DELETE FROM movies WHERE id = $1", [stray.id]);
+				dedupedMovies.push({ id: stray.id, title: stray.title });
+				console.log(
+					`[sync] dedup: removed stray "${stray.title}" (${stray.id})`,
+				);
 			}
 		}
 
@@ -119,11 +176,6 @@ export async function runSync(
 		// were never successfully pushed.
 		const localRows = await db.select<Record<string, unknown>[]>(
 			"SELECT * FROM movies WHERE deleted_at IS NULL",
-		);
-
-		const allPbRecords = await pb.collection("movies").getFullList();
-		const pbIdMap = new Map(
-			allPbRecords.map((r) => [r.local_id as string, r.id]),
 		);
 
 		// Track pushed local_ids so the pull step can skip them — avoids
@@ -174,7 +226,10 @@ export async function runSync(
 					}
 
 					pushedLocalIds.add(row.id as string);
-					pushed++;
+					pushedMovies.push({
+						id: row.id as string,
+						title: row.title as string,
+					});
 				} catch (e) {
 					const msg = `Failed to push movie ${String(row.id)}: ${String(e)}`;
 					console.error("[sync] push error:", msg, e);
@@ -293,7 +348,7 @@ export async function runSync(
 						validated.season_number,
 					],
 				);
-				pulled++;
+				pulledMovies.push({ id: validated.local_id, title: validated.title });
 			} catch (e) {
 				const msg = `Failed to pull record ${record.id}: ${String(e)}`;
 				console.error("[sync] pull error:", msg, e);
@@ -306,7 +361,13 @@ export async function runSync(
 		setLastSyncedAt(syncStartedAt);
 		setPendingDeletes(0);
 
-		return SyncResultSchema.parse({ pushed, pulled, errors });
+		return SyncResultSchema.parse({
+			pushedMovies,
+			pulledMovies,
+			deletedMovies,
+			dedupedMovies,
+			errors,
+		});
 	} catch (e) {
 		if (e instanceof PendingDeletesError) throw e;
 		const msg = e instanceof Error ? e.message : String(e);

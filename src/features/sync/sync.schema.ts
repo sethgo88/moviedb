@@ -59,8 +59,15 @@ export const PbMovieRecordSchema = z.object({
 	season_number: pbNullableInt,
 });
 
+const SyncedMovieSchema = z.object({
+	id: z.string(),
+	title: z.string(),
+});
+
 export const SyncResultSchema = z.object({
-	pushed: z.number().int(),
-	pulled: z.number().int(),
+	pushedMovies: z.array(SyncedMovieSchema),
+	pulledMovies: z.array(SyncedMovieSchema),
+	deletedMovies: z.array(SyncedMovieSchema),
+	dedupedMovies: z.array(SyncedMovieSchema),
 	errors: z.array(z.string()),
 });

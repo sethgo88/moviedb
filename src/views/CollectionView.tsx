@@ -53,6 +53,7 @@ const chipBase =
 	"shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors";
 const chipActive = "border-blue-500 bg-blue-600 text-white";
 const chipInactive = "border-white/15 bg-white/5 text-white/60";
+const chipHidden = "border-red-400/50 bg-red-400/10 text-red-400";
 
 function sortMovies(movies: Movie[], sortBy: SortOption): Movie[] {
 	return [...movies].sort((a, b) => {
@@ -263,10 +264,16 @@ export function CollectionView() {
 							<button
 								key={key}
 								type="button"
-								onClick={() => setter(active === true ? null : true)}
+								onClick={() =>
+								setter(active === null ? true : active === true ? false : null)
+							}
 								className={cn(
 									chipBase,
-									active === true ? chipActive : chipInactive,
+									active === true
+									? chipActive
+									: active === false
+										? chipHidden
+										: chipInactive,
 								)}
 							>
 								{label}

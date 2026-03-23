@@ -1,6 +1,5 @@
 import { useForm } from "@tanstack/react-form";
 import { useBlocker, useNavigate, useParams } from "@tanstack/react-router";
-import { Search } from "lucide-react";
 import { useState } from "react";
 import { z } from "zod";
 import {
@@ -11,16 +10,19 @@ import type {
 	MovieFormat,
 	MovieStatus,
 } from "../../../features/movies/movies.types";
+import { useTmdbSearch } from "../../../features/tmdb/tmdb.queries";
+import {
+	fetchAndCachePoster,
+	TMDB_POSTER_BASE,
+} from "../../../features/tmdb/tmdb.service";
 import type { TmdbSearchResult } from "../../../features/tmdb/tmdb.types";
 import { PosterPicker } from "../../atoms/PosterPicker/poster-picker";
 import { Select } from "../../atoms/Select/select";
 import { Slider } from "../../atoms/Slider/slider";
 import { Spinner } from "../../atoms/Spinner/spinner";
-import { Toast } from "../../atoms/Toast/toast";
 import { Toggle } from "../../atoms/Toggle/toggle";
 import { ConfirmSheet } from "../../molecules/ConfirmSheet/confirm-sheet";
 import { FormField } from "../../molecules/FormField/form-field";
-import { TmdbSearch } from "../../molecules/TmdbSearch/tmdb-search";
 import { ToggleGroup } from "../../molecules/ToggleGroup/toggle-group";
 
 const STATUS_OPTIONS: { label: string; value: MovieStatus }[] = [
@@ -99,17 +101,15 @@ export function MovieForm({
 	const { data: movie, isLoading } = useMovie(id);
 	const { mutate: softDelete, isPending: isDeleting } = useSoftDeleteMovie();
 	const [showDelete, setShowDelete] = useState(false);
-	const [showTmdbSearch, setShowTmdbSearch] = useState(false);
-	const [tmdbToast, setTmdbToast] = useState<{
-		message: string;
-		variant: "success" | "error";
-	} | null>(null);
 
-	// Router-level blocker — intercepts all navigation (NavBar, back gesture,
-	// programmatic navigate) when the form is dirty.
-	// Exclude isSubmitting: navigation triggered inside onSubmit (e.g. navigate
-	// after createMovie/updateMovie) must not be blocked — formApi.reset() hasn't
-	// run yet so isDirty is still true at that moment.
+	const [titleQuery, setTitleQuery] = useState("");
+	const [isTitleFocused, setIsTitleFocused] = useState(false);
+	const [loadingId, setLoadingId] = useState<number | null>(null);
+
+	const { data: searchResults } = useTmdbSearch(titleQuery);
+	const showDropdown =
+		isTitleFocused && !!searchResults && searchResults.length > 0;
+
 	const blocker = useBlocker({
 		shouldBlockFn: () => form.state.isDirty && !form.state.isSubmitting,
 		withResolver: true,
@@ -133,7 +133,17 @@ export function MovieForm({
 		});
 	}
 
-	function handleTmdbSelect(result: TmdbSearchResult, url: string | null) {
+	async function handleSelectResult(result: TmdbSearchResult) {
+		setLoadingId(result.id);
+		let posterUrl: string | null = null;
+		if (result.poster_path) {
+			try {
+				posterUrl = await fetchAndCachePoster(result.id, result.poster_path);
+			} catch {
+				// poster unavailable — other fields still applied
+			}
+		}
+		setLoadingId(null);
 		form.setFieldValue("title", result.title);
 		if (result.release_date) {
 			form.setFieldValue("year", result.release_date.slice(0, 4));
@@ -143,12 +153,9 @@ export function MovieForm({
 			"tmdb_rating",
 			result.vote_average > 0 ? result.vote_average : null,
 		);
-		if (url) {
-			form.setFieldValue("poster_url", url);
-		}
-		setShowTmdbSearch(false);
-		setTmdbToast({ message: "TMDB data applied", variant: "success" });
-		setTimeout(() => setTmdbToast(null), 3000);
+		if (posterUrl) form.setFieldValue("poster_url", posterUrl);
+		setTitleQuery("");
+		setIsTitleFocused(false);
 	}
 
 	return (
@@ -159,14 +166,6 @@ export function MovieForm({
 					Back
 				</button>
 				<h1 className="flex-1 text-center text-lg font-semibold">{title}</h1>
-				<button
-					type="button"
-					aria-label="Search TMDB"
-					className="mr-2 text-white/50"
-					onClick={() => setShowTmdbSearch(true)}
-				>
-					<Search size={20} />
-				</button>
 				<form.Subscribe selector={(s) => s.isSubmitting}>
 					{(isSubmitting) => (
 						<button
@@ -189,7 +188,104 @@ export function MovieForm({
 					}}
 					className="flex flex-col gap-5"
 				>
-					{/* Poster + Title/Year row */}
+					{/* Title with inline TMDB autocomplete */}
+					<form.Field
+						name="title"
+						validators={{
+							onBlur: ({ value }) => {
+								const result = z
+									.string()
+									.min(1, "Title is required")
+									.safeParse(value);
+								return result.success
+									? undefined
+									: result.error.issues[0]?.message;
+							},
+						}}
+					>
+						{(field) => (
+							<FormField
+								label="Title *"
+								error={field.state.meta.errors[0]?.toString()}
+							>
+								<div className="relative">
+									<input
+										value={field.state.value}
+										placeholder="Movie title"
+										className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-white placeholder-white/30 outline-none transition-colors focus:border-blue-500"
+										onChange={(e) => {
+											field.handleChange(e.target.value);
+											setTitleQuery(e.target.value);
+										}}
+										onFocus={() => setIsTitleFocused(true)}
+										onBlur={() => {
+											field.handleBlur();
+											setTimeout(() => setIsTitleFocused(false), 150);
+										}}
+									/>
+									{showDropdown && (
+										<ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-y-auto rounded-lg border border-white/10 bg-gray-800 shadow-xl">
+											{(searchResults ?? []).map((result) => {
+												const year = result.release_date?.slice(0, 4);
+												const isLoading = loadingId === result.id;
+												return (
+													<li key={result.id}>
+														<button
+															type="button"
+															disabled={loadingId !== null}
+															className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors active:bg-white/5 disabled:opacity-50"
+															onMouseDown={(e) => e.preventDefault()}
+															onClick={() => handleSelectResult(result)}
+														>
+															<div className="h-12 w-8 shrink-0 overflow-hidden rounded bg-white/10">
+																{result.poster_path ? (
+																	<img
+																		src={`${TMDB_POSTER_BASE}${result.poster_path}`}
+																		alt={result.title}
+																		className="h-full w-full object-cover"
+																	/>
+																) : (
+																	<div className="h-full w-full" />
+																)}
+															</div>
+															<div className="min-w-0 flex-1">
+																<p className="truncate text-sm font-medium text-white">
+																	{result.title}
+																</p>
+																{year && (
+																	<p className="text-xs text-white/50">{year}</p>
+																)}
+															</div>
+															{isLoading && (
+																<span className="text-xs text-white/40">
+																	Loading…
+																</span>
+															)}
+														</button>
+													</li>
+												);
+											})}
+										</ul>
+									)}
+								</div>
+							</FormField>
+						)}
+					</form.Field>
+
+					{/* Year */}
+					<form.Field name="year">
+						{(field) => (
+							<FormField label="Year">
+								<Select
+									options={YEAR_OPTIONS}
+									value={field.state.value}
+									onChange={(e) => field.handleChange(e.target.value)}
+								/>
+							</FormField>
+						)}
+					</form.Field>
+
+					{/* Poster + Physical/Digital */}
 					<div className="flex gap-4">
 						<form.Field name="poster_url">
 							{(field) => (
@@ -199,49 +295,25 @@ export function MovieForm({
 								/>
 							)}
 						</form.Field>
-
-						<div className="flex flex-1 flex-col gap-3">
-							{/* Title */}
-							<form.Field
-								name="title"
-								validators={{
-									onBlur: ({ value }) => {
-										const result = z
-											.string()
-											.min(1, "Title is required")
-											.safeParse(value);
-										return result.success
-											? undefined
-											: result.error.issues[0]?.message;
-									},
-								}}
-							>
+						<div className="flex flex-1 flex-col justify-center gap-4 rounded-lg border border-white/10 p-4">
+							<form.Field name="is_physical">
 								{(field) => (
-									<FormField
-										label="Title *"
-										error={field.state.meta.errors[0]?.toString()}
-									>
-										<input
-											value={field.state.value}
-											placeholder="Movie title"
-											className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-white placeholder-white/30 outline-none transition-colors focus:border-blue-500"
-											onChange={(e) => field.handleChange(e.target.value)}
-											onBlur={field.handleBlur}
-										/>
-									</FormField>
+									<Toggle
+										checked={field.state.value}
+										onChange={(v) => field.handleChange(v)}
+										label="Physical copy"
+										vertical
+									/>
 								)}
 							</form.Field>
-
-							{/* Year */}
-							<form.Field name="year">
+							<form.Field name="is_digital">
 								{(field) => (
-									<FormField label="Year">
-										<Select
-											options={YEAR_OPTIONS}
-											value={field.state.value}
-											onChange={(e) => field.handleChange(e.target.value)}
-										/>
-									</FormField>
+									<Toggle
+										checked={field.state.value}
+										onChange={(v) => field.handleChange(v)}
+										label="Digital copy"
+										vertical
+									/>
 								)}
 							</form.Field>
 						</div>
@@ -259,30 +331,6 @@ export function MovieForm({
 							</FormField>
 						)}
 					</form.Field>
-
-					{/* Copy type toggles */}
-					<div className="flex justify-around gap-4 rounded-lg border border-white/10 p-4">
-						<form.Field name="is_physical">
-							{(field) => (
-								<Toggle
-									checked={field.state.value}
-									onChange={(v) => field.handleChange(v)}
-									label="Physical copy"
-									vertical
-								/>
-							)}
-						</form.Field>
-						<form.Field name="is_digital">
-							{(field) => (
-								<Toggle
-									checked={field.state.value}
-									onChange={(v) => field.handleChange(v)}
-									label="Digital copy"
-									vertical
-								/>
-							)}
-						</form.Field>
-					</div>
 
 					{/* Format */}
 					<form.Field name="format">
@@ -350,9 +398,9 @@ export function MovieForm({
 						)}
 					</form.Field>
 				</form>
+
 				{movie && (
 					<div>
-						{/* Delete */}
 						<div className="border-t border-white/10 p-4">
 							<button
 								type="button"
@@ -377,12 +425,6 @@ export function MovieForm({
 				)}
 			</div>
 
-			<Toast
-				message={tmdbToast?.message ?? ""}
-				visible={tmdbToast !== null}
-				variant={tmdbToast?.variant}
-			/>
-
 			<ConfirmSheet
 				isOpen={blocker.status === "blocked"}
 				title="Discard Changes"
@@ -396,12 +438,6 @@ export function MovieForm({
 					await form.handleSubmit();
 					blocker.proceed?.();
 				}}
-			/>
-
-			<TmdbSearch
-				isOpen={showTmdbSearch}
-				onClose={() => setShowTmdbSearch(false)}
-				onSelect={handleTmdbSelect}
 			/>
 		</div>
 	);

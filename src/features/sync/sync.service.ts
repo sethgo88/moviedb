@@ -163,7 +163,9 @@ export async function runSync(
 				}
 				await db.execute("DELETE FROM movies WHERE id = $1", [stray.id]);
 				dedupedMovies.push({ id: stray.id, title: stray.title });
-				console.log(`[sync] dedup: removed stray "${stray.title}" (${stray.id})`);
+				console.log(
+					`[sync] dedup: removed stray "${stray.title}" (${stray.id})`,
+				);
 			}
 		}
 

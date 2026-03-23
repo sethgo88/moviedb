@@ -253,7 +253,9 @@ export function MovieForm({
 																	{result.title}
 																</p>
 																{year && (
-																	<p className="text-xs text-white/50">{year}</p>
+																	<p className="text-xs text-white/50">
+																		{year}
+																	</p>
 																)}
 															</div>
 															{isLoading && (

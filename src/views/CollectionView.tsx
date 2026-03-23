@@ -265,15 +265,17 @@ export function CollectionView() {
 								key={key}
 								type="button"
 								onClick={() =>
-								setter(active === null ? true : active === true ? false : null)
-							}
+									setter(
+										active === null ? true : active === true ? false : null,
+									)
+								}
 								className={cn(
 									chipBase,
 									active === true
-									? chipActive
-									: active === false
-										? chipHidden
-										: chipInactive,
+										? chipActive
+										: active === false
+											? chipHidden
+											: chipInactive,
 								)}
 							>
 								{label}

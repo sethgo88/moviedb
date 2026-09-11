@@ -165,6 +165,108 @@ export async function fetchSeasonDetails(
 	return { ...season, poster_path: show.poster_path };
 }
 
+/**
+ * For every movie/show/season with a tmdb_id, fetch fresh TMDB metadata and
+ * update year, tmdb_rating, and poster_url (if not already locally cached).
+ * Returns the count of successfully updated records.
+ */
+export async function refreshTmdbData(): Promise<number> {
+	const db = await getDb();
+	const rows = await db.select<
+		{
+			id: string;
+			tmdb_id: number;
+			type: string;
+			poster_url: string | null;
+			season_number: number | null;
+			show_tmdb_id: number | null;
+		}[]
+	>(
+		`SELECT m.id, m.tmdb_id, m.type, m.poster_url, m.season_number,
+		        s.tmdb_id AS show_tmdb_id
+		 FROM movies m
+		 LEFT JOIN movies s ON s.id = m.show_id
+		 WHERE m.deleted_at IS NULL AND m.tmdb_id IS NOT NULL`,
+	);
+
+	let count = 0;
+	for (const row of rows) {
+		try {
+			let year: number | null = null;
+			let tmdbRating: number | null = null;
+			let posterPath: string | null = null;
+
+			if (row.type === "MOVIE") {
+				const url = `${TMDB_BASE}/movie/${row.tmdb_id}?api_key=${TMDB_API_KEY}`;
+				const res = await fetch(url);
+				if (!res.ok) continue;
+				const data = TmdbMovieDetailsSchema.parse(await res.json());
+				year = data.release_date
+					? parseInt(data.release_date.slice(0, 4), 10) || null
+					: null;
+				tmdbRating = data.vote_average || null;
+				posterPath = data.poster_path;
+			} else if (row.type === "TV_SHOW") {
+				const url = `${TMDB_BASE}/tv/${row.tmdb_id}?api_key=${TMDB_API_KEY}`;
+				const res = await fetch(url);
+				if (!res.ok) continue;
+				const data = TmdbShowDetailsSchema.parse(await res.json());
+				year = data.first_air_date
+					? parseInt(data.first_air_date.slice(0, 4), 10) || null
+					: null;
+				tmdbRating = data.vote_average || null;
+				posterPath = data.poster_path;
+			} else if (
+				row.type === "TV_SEASON" &&
+				row.show_tmdb_id != null &&
+				row.season_number != null
+			) {
+				const [seasonRes, showRes] = await Promise.all([
+					fetch(
+						`${TMDB_BASE}/tv/${row.show_tmdb_id}/season/${row.season_number}?api_key=${TMDB_API_KEY}`,
+					),
+					fetch(`${TMDB_BASE}/tv/${row.show_tmdb_id}?api_key=${TMDB_API_KEY}`),
+				]);
+				if (!seasonRes.ok) continue;
+				const season = TmdbSeasonDetailsSchema.parse(await seasonRes.json());
+				year = season.air_date
+					? parseInt(season.air_date.slice(0, 4), 10) || null
+					: null;
+				posterPath = season.poster_path;
+				if (!posterPath && showRes.ok) {
+					const show = TmdbShowDetailsSchema.parse(await showRes.json());
+					posterPath = show.poster_path;
+					tmdbRating = show.vote_average || null;
+				}
+			} else {
+				continue;
+			}
+
+			// Only update poster if not already a locally cached data URL
+			let posterUrl = row.poster_url;
+			if (
+				posterPath &&
+				(!posterUrl || posterUrl.startsWith("https://image.tmdb.org"))
+			) {
+				try {
+					posterUrl = await fetchAndCachePoster(row.tmdb_id, posterPath);
+				} catch {
+					// keep existing
+				}
+			}
+
+			await db.execute(
+				`UPDATE movies SET year = $1, tmdb_rating = $2, poster_url = $3 WHERE id = $4`,
+				[year, tmdbRating, posterUrl, row.id],
+			);
+			count++;
+		} catch {
+			// silent fail — skip this entry and continue
+		}
+	}
+	return count;
+}
+
 export async function clearPosterCache(): Promise<void> {
 	return invoke("clear_poster_cache");
 }

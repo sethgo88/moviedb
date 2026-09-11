@@ -10,7 +10,7 @@ import {
 import {
 	clearPosterCache,
 	getPosterCacheSize,
-	refreshUncachedPosters,
+	refreshTmdbData,
 } from "../features/tmdb/tmdb.service";
 import { configurePb, POCKETBASE_URL_KEY } from "../lib/pocketbase";
 
@@ -68,17 +68,17 @@ export function SettingsView() {
 		},
 	});
 
-	const { mutate: doRefreshPosters, isPending: isRefreshing } = useMutation({
-		mutationFn: refreshUncachedPosters,
+	const { mutate: doRefreshTmdb, isPending: isRefreshing } = useMutation({
+		mutationFn: refreshTmdbData,
 		onSuccess: (count) => {
 			queryClient.invalidateQueries({ queryKey: ["posterCacheSize"] });
 			showToast(
 				count > 0
-					? `Cached ${count} poster${count === 1 ? "" : "s"}`
-					: "All posters already cached",
+					? `Updated ${count} title${count === 1 ? "" : "s"}`
+					: "All titles already up to date",
 			);
 		},
-		onError: () => showToast("Failed to refresh posters", "error"),
+		onError: () => showToast("Failed to refresh TMDB data", "error"),
 	});
 
 	const { mutate: doExportJson, isPending: isExportingJson } = useMutation({
@@ -134,18 +134,18 @@ export function SettingsView() {
 					</div>
 				</section>
 
-				{/* Posters */}
+				{/* TMDB */}
 				<section className="flex flex-col gap-3">
 					<h2 className="text-xs font-semibold uppercase tracking-widest text-white/40">
-						Posters
+						TMDB
 					</h2>
 					<div className="rounded-2xl border border-white/10 bg-gray-900">
 						<div className="px-4 py-3.5">
 							<p className="text-sm font-medium text-white">
-								Refresh TMDB Posters
+								Refresh TMDB Data
 							</p>
 							<p className="mt-0.5 text-xs text-white/40">
-								Download posters for any movies missing a cached image.
+								Re-fetch year, rating, and poster for all TMDB-linked titles.
 							</p>
 						</div>
 						<div className="h-px bg-white/10" />
@@ -153,9 +153,9 @@ export function SettingsView() {
 							type="button"
 							disabled={isRefreshing}
 							className="w-full px-4 py-3.5 text-left text-sm font-medium text-blue-400 transition-opacity active:opacity-70 disabled:opacity-40"
-							onClick={() => doRefreshPosters()}
+							onClick={() => doRefreshTmdb()}
 						>
-							{isRefreshing ? "Refreshing…" : "Refresh Posters"}
+							{isRefreshing ? "Refreshing…" : "Refresh TMDB Data"}
 						</button>
 					</div>
 				</section>

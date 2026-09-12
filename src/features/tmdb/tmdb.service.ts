@@ -204,7 +204,7 @@ export async function refreshTmdbData(): Promise<number> {
 				year = data.release_date
 					? parseInt(data.release_date.slice(0, 4), 10) || null
 					: null;
-				tmdbRating = data.vote_average || null;
+				tmdbRating = data.vote_average > 0 ? data.vote_average : null;
 				posterPath = data.poster_path;
 			} else if (row.type === "TV_SHOW") {
 				const url = `${TMDB_BASE}/tv/${row.tmdb_id}?api_key=${TMDB_API_KEY}`;
@@ -214,7 +214,7 @@ export async function refreshTmdbData(): Promise<number> {
 				year = data.first_air_date
 					? parseInt(data.first_air_date.slice(0, 4), 10) || null
 					: null;
-				tmdbRating = data.vote_average || null;
+				tmdbRating = data.vote_average > 0 ? data.vote_average : null;
 				posterPath = data.poster_path;
 			} else if (
 				row.type === "TV_SEASON" &&
@@ -233,10 +233,10 @@ export async function refreshTmdbData(): Promise<number> {
 					? parseInt(season.air_date.slice(0, 4), 10) || null
 					: null;
 				posterPath = season.poster_path;
-				if (!posterPath && showRes.ok) {
+				if (showRes.ok) {
 					const show = TmdbShowDetailsSchema.parse(await showRes.json());
-					posterPath = show.poster_path;
-					tmdbRating = show.vote_average || null;
+					if (!posterPath) posterPath = show.poster_path;
+					tmdbRating = show.vote_average > 0 ? show.vote_average : null;
 				}
 			} else {
 				continue;

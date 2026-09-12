@@ -72,6 +72,7 @@ export function SettingsView() {
 		mutationFn: refreshTmdbData,
 		onSuccess: (count) => {
 			queryClient.invalidateQueries({ queryKey: ["posterCacheSize"] });
+			queryClient.invalidateQueries({ queryKey: ["movies"] });
 			showToast(
 				count > 0
 					? `Updated ${count} title${count === 1 ? "" : "s"}`

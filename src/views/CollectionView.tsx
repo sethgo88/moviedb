@@ -85,6 +85,7 @@ function sortMovies(movies: Movie[], sortBy: SortOption): Movie[] {
 				return a.created_at.localeCompare(b.created_at);
 			default: {
 				const _exhaustive: never = sortBy;
+					void _exhaustive;
 				return 0;
 			}
 		}

@@ -16,6 +16,8 @@ export const TmdbSearchResponseSchema = z.object({
 export const TmdbMovieDetailsSchema = z.object({
 	id: z.number().int(),
 	poster_path: z.string().nullable(),
+	release_date: z.string().optional().default(""),
+	vote_average: z.number().optional().default(0),
 });
 
 export const TmdbTvSearchResultSchema = z.object({
@@ -34,10 +36,13 @@ export const TmdbTvSearchResponseSchema = z.object({
 export const TmdbShowDetailsSchema = z.object({
 	id: z.number().int(),
 	poster_path: z.string().nullable(),
+	first_air_date: z.string().optional().default(""),
+	vote_average: z.number().optional().default(0),
 });
 
 export const TmdbSeasonDetailsSchema = z.object({
 	id: z.number().int(),
 	season_number: z.number().int(),
 	poster_path: z.string().nullable(),
+	air_date: z.string().optional().default(""),
 });

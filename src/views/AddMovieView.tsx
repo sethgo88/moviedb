@@ -1,6 +1,6 @@
 import { useForm } from "@tanstack/react-form";
 import { useBlocker, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import { PosterPicker } from "@/components/atoms/PosterPicker/poster-picker";
 import { Select } from "@/components/atoms/Select/select";
@@ -28,6 +28,7 @@ import type {
 	TmdbSearchResult,
 	TmdbTvSearchResult,
 } from "@/features/tmdb/tmdb.types";
+import { useTmdbStore } from "@/features/tmdb/tmdb.store";
 
 const STATUS_OPTIONS: { label: string; value: MovieStatus }[] = [
 	{ label: "Owned", value: "OWNED" },
@@ -196,6 +197,24 @@ export function AddMovieView() {
 		shouldBlockFn: () => form.state.isDirty && !form.state.isSubmitting,
 		withResolver: true,
 	});
+
+	const pendingSelection = useTmdbStore((s) => s.pendingSelection);
+	const setPendingSelection = useTmdbStore((s) => s.setPendingSelection);
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: mount-only — pendingSelection is
+	// read once on mount and immediately cleared; handlers are hoisted function declarations
+	useEffect(() => {
+		if (!pendingSelection) return;
+		const snapshot = pendingSelection;
+		setPendingSelection(null); // clear before any await — back nav is safe
+		if (snapshot.type === "MOVIE") {
+			switchMode("MOVIE");
+			handleSelectMovieResult(snapshot.result).catch(() => {});
+		} else {
+			switchMode("TV");
+			handleSelectTvShow(snapshot.result).catch(() => {});
+		}
+	}, []);
 
 	function switchMode(next: "MOVIE" | "TV") {
 		if (next === mode) return;

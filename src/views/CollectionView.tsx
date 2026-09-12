@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { TvMinimalPlay } from "lucide-react";
+import { Film, TvMinimalPlay } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Button } from "../components/atoms/Button/button";
 import { Spinner } from "../components/atoms/Spinner/spinner";
@@ -14,6 +14,13 @@ import type {
 	MovieStatus,
 	SortOption,
 } from "../features/movies/movies.types";
+import { useTmdbSearch, useTmdbTvSearch } from "../features/tmdb/tmdb.queries";
+import { TMDB_POSTER_BASE } from "../features/tmdb/tmdb.service";
+import { useTmdbStore } from "../features/tmdb/tmdb.store";
+import type {
+	TmdbSearchResult,
+	TmdbTvSearchResult,
+} from "../features/tmdb/tmdb.types";
 import { useDebounce } from "../hooks/useDebounce";
 import { usePullToRefresh } from "../hooks/usePullToRefresh";
 import { cn } from "../lib/cn";
@@ -162,6 +169,24 @@ export function CollectionView() {
 		}),
 		sortBy,
 	);
+
+	// TMDB fallback — shown whenever there's an active search query
+	const tmdbEnabled = debouncedSearch.trim().length >= 2;
+	const { data: tmdbMovies = [], isFetching: isFetchingTmdbMovies } =
+		useTmdbSearch(tmdbEnabled ? debouncedSearch : "");
+	const { data: tmdbShows = [], isFetching: isFetchingTmdbShows } =
+		useTmdbTvSearch(tmdbEnabled ? debouncedSearch : "");
+	const setPendingSelection = useTmdbStore((s) => s.setPendingSelection);
+
+	function handleTmdbMovieSelect(result: TmdbSearchResult) {
+		setPendingSelection({ type: "MOVIE", result });
+		navigate({ to: "/movie/add" });
+	}
+
+	function handleTmdbTvSelect(result: TmdbTvSearchResult) {
+		setPendingSelection({ type: "TV", result });
+		navigate({ to: "/movie/add" });
+	}
 
 	// Build TV grouped structure when in TV mode
 	const showMap = new Map(
@@ -325,8 +350,8 @@ export function CollectionView() {
 							</Button>
 						</div>
 					) : filtered.length === 0 ? (
-						<div className="flex flex-col items-center gap-2 py-10 text-center">
-							<p className="text-white/50">No results.</p>
+						<div className="flex flex-col items-center gap-2 py-4 text-center">
+							<p className="text-white/50">No results in your collection.</p>
 							{hasFilters && (
 								<button
 									type="button"
@@ -417,6 +442,94 @@ export function CollectionView() {
 									<MovieCard key={movie.id} movie={movie} />
 								))}
 							</div>
+						</div>
+					)}
+
+					{tmdbEnabled && (
+						<div className="mt-4 flex flex-col gap-3">
+							<p className="text-xs font-medium uppercase tracking-wide text-white/40">
+								From TMDB
+							</p>
+
+							{(isFetchingTmdbMovies || isFetchingTmdbShows) && (
+								<p className="text-sm text-white/40">Searching TMDB…</p>
+							)}
+
+							{tmdbMovies.slice(0, 3).map((result) => (
+								<button
+									key={`movie-${result.id}`}
+									type="button"
+									className="flex w-full items-center gap-3 rounded-xl bg-white/5 px-3 py-2.5 text-left active:bg-white/10"
+									onClick={() => handleTmdbMovieSelect(result)}
+								>
+									<div className="h-14 w-10 shrink-0 overflow-hidden rounded bg-white/10">
+										{result.poster_path ? (
+											<img
+												src={`${TMDB_POSTER_BASE}${result.poster_path}`}
+												alt={result.title}
+												className="h-full w-full object-cover"
+											/>
+										) : (
+											<div className="h-full w-full" />
+										)}
+									</div>
+									<div className="min-w-0 flex-1">
+										<p className="truncate text-sm font-medium text-white">
+											{result.title}
+										</p>
+										{result.release_date?.slice(0, 4) && (
+											<p className="text-xs text-white/50">
+												{result.release_date.slice(0, 4)}
+											</p>
+										)}
+									</div>
+									<Film size={14} className="shrink-0 text-white/30" />
+								</button>
+							))}
+
+							{tmdbShows.slice(0, 3).map((result) => (
+								<button
+									key={`tv-${result.id}`}
+									type="button"
+									className="flex w-full items-center gap-3 rounded-xl bg-white/5 px-3 py-2.5 text-left active:bg-white/10"
+									onClick={() => handleTmdbTvSelect(result)}
+								>
+									<div className="h-14 w-10 shrink-0 overflow-hidden rounded bg-white/10">
+										{result.poster_path ? (
+											<img
+												src={`${TMDB_POSTER_BASE}${result.poster_path}`}
+												alt={result.name}
+												className="h-full w-full object-cover"
+											/>
+										) : (
+											<div className="h-full w-full" />
+										)}
+									</div>
+									<div className="min-w-0 flex-1">
+										<p className="truncate text-sm font-medium text-white">
+											{result.name}
+										</p>
+										{result.first_air_date?.slice(0, 4) && (
+											<p className="text-xs text-white/50">
+												{result.first_air_date.slice(0, 4)}
+											</p>
+										)}
+									</div>
+									<TvMinimalPlay
+										size={14}
+										className="shrink-0 text-blue-400/60"
+									/>
+								</button>
+							))}
+
+							{!isFetchingTmdbMovies &&
+								!isFetchingTmdbShows &&
+								tmdbMovies.length === 0 &&
+								tmdbShows.length === 0 && (
+									<p className="text-sm text-white/30">
+										Nothing found on TMDB either.
+									</p>
+								)}
 						</div>
 					)}
 				</div>

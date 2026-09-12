@@ -8,7 +8,8 @@
       "mcp__github__issue_write",
       "WebFetch(domain:api.github.com)",
       "Read(//c/web/moviedb/src/lib//**)",
-      "Read(//c/web/moviedb/src//**)"
+      "Read(//c/web/moviedb/src//**)",
+      "Bash(xargs grep:*)"
     ]
   },
   "hooks": {

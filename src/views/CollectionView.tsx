@@ -50,10 +50,12 @@ const COPY_CHIPS = [
 const SORT_OPTIONS: { label: string; value: SortOption }[] = [
 	{ label: "Title A→Z", value: "title_asc" },
 	{ label: "Title Z→A", value: "title_desc" },
-	{ label: "Newest first", value: "year_desc" },
-	{ label: "Oldest first", value: "year_asc" },
+	{ label: "Release Year ↓", value: "year_desc" },
+	{ label: "Release Year ↑", value: "year_asc" },
 	{ label: "My rating ↓", value: "rating_desc" },
 	{ label: "TMDB rating ↓", value: "tmdb_rating_desc" },
+	{ label: "Newest First", value: "created_desc" },
+	{ label: "Oldest First", value: "created_asc" },
 ];
 
 const chipBase =
@@ -77,8 +79,14 @@ function sortMovies(movies: Movie[], sortBy: SortOption): Movie[] {
 				return (b.personal_rating ?? -1) - (a.personal_rating ?? -1);
 			case "tmdb_rating_desc":
 				return (b.tmdb_rating ?? -1) - (a.tmdb_rating ?? -1);
-			default:
+			case "created_desc":
+				return b.created_at.localeCompare(a.created_at);
+			case "created_asc":
+				return a.created_at.localeCompare(b.created_at);
+			default: {
+				const _exhaustive: never = sortBy;
 				return 0;
+			}
 		}
 	});
 }

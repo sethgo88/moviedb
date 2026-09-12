@@ -48,7 +48,7 @@ export const PbMovieRecordSchema = z.object({
 	is_backed_up: z.boolean(),
 	notes: pbNullableString,
 	deleted_at: pbNullableString,
-	created_at: z.string(),
+	created_at: z.string().transform((v) => v.replace(" ", "T")),
 	updated_at: z
 		.string()
 		.optional()

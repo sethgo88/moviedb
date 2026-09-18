@@ -12,7 +12,6 @@ import {
 	getPosterCacheSize,
 	refreshTmdbData,
 } from "../features/tmdb/tmdb.service";
-import { configurePb, POCKETBASE_URL_KEY } from "../lib/pocketbase";
 
 function formatBytes(bytes: number): string {
 	if (bytes === 0) return "0 B";
@@ -25,10 +24,6 @@ export function SettingsView() {
 	const queryClient = useQueryClient();
 	const navigate = useNavigate();
 
-	// PocketBase URL
-	const [pbUrl, setPbUrl] = useState(
-		() => localStorage.getItem(POCKETBASE_URL_KEY) ?? "",
-	);
 	const [toast, setToast] = useState<{
 		message: string;
 		variant: "success" | "error";
@@ -40,11 +35,6 @@ export function SettingsView() {
 	) {
 		setToast({ message, variant });
 		setTimeout(() => setToast(null), 3000);
-	}
-
-	function handleSavePbUrl() {
-		configurePb(pbUrl.trim());
-		showToast("Server URL saved");
 	}
 
 	// Poster cache
@@ -108,33 +98,6 @@ export function SettingsView() {
 			</div>
 
 			<div className="flex flex-col gap-6 p-4">
-				{/* PocketBase */}
-				<section className="flex flex-col gap-3">
-					<h2 className="text-xs font-semibold uppercase tracking-widest text-white/40">
-						PocketBase Sync
-					</h2>
-					<div className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-gray-900 p-4">
-						<label htmlFor="pb-url" className="text-sm text-white/60">
-							Server URL
-						</label>
-						<input
-							id="pb-url"
-							type="url"
-							value={pbUrl}
-							onChange={(e) => setPbUrl(e.target.value)}
-							placeholder="http://192.168.1.x:8090"
-							className="rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-sm text-white placeholder-white/30 outline-none transition-colors focus:border-blue-500"
-						/>
-						<button
-							type="button"
-							className="mt-1 rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white transition-opacity active:opacity-70"
-							onClick={handleSavePbUrl}
-						>
-							Save
-						</button>
-					</div>
-				</section>
-
 				{/* TMDB */}
 				<section className="flex flex-col gap-3">
 					<h2 className="text-xs font-semibold uppercase tracking-widest text-white/40">

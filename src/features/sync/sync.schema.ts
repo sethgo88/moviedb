@@ -5,58 +5,28 @@ import {
 	MovieTypeSchema,
 } from "../movies/movies.schema";
 
-// PocketBase returns 0 for unset number fields and "" for unset string fields
-// instead of null. These helpers normalise those sentinel values to null.
-const pbNullableInt = z
-	.number()
-	.int()
-	.nullable()
-	.optional()
-	.transform((v) => (v == null || v === 0 ? null : v));
-
-const pbNullableNumber = z
-	.number()
-	.nullable()
-	.optional()
-	.transform((v) => (v == null || v === 0 ? null : v));
-
-const pbNullableString = z
-	.string()
-	.nullable()
-	.optional()
-	.transform((v) => (v === "" || v == null ? null : v));
-
-export const PbMovieRecordSchema = z.object({
-	// PocketBase metadata
-	id: z.string(),
-	collectionId: z.string(),
-	collectionName: z.string(),
-	created: z.string(),
-	updated: z.string(),
-	// Our fields
-	local_id: z.string().uuid(),
-	tmdb_id: pbNullableInt,
+// Supabase returns proper native types — no sentinel value handling needed.
+export const SupabaseMovieRecordSchema = z.object({
+	id: z.string().uuid(),
+	tmdb_id: z.number().int().nullable(),
 	title: z.string(),
-	year: pbNullableInt,
-	poster_url: pbNullableString,
-	tmdb_rating: pbNullableNumber,
-	personal_rating: pbNullableNumber,
+	year: z.number().int().nullable(),
+	poster_url: z.string().nullable(),
+	tmdb_rating: z.number().nullable(),
+	personal_rating: z.number().nullable(),
 	status: MovieStatusSchema,
 	format: MovieFormatSchema,
 	is_physical: z.boolean(),
 	is_digital: z.boolean(),
 	is_backed_up: z.boolean(),
-	notes: pbNullableString,
-	deleted_at: pbNullableString,
-	created_at: z.string().transform((v) => v.replace(" ", "T")),
-	updated_at: z
-		.string()
-		.optional()
-		.transform((v) => v ?? ""),
-	// TV show fields — optional with safe fallbacks for old PocketBase records
+	notes: z.string().nullable(),
+	deleted_at: z.string().nullable(),
+	created_at: z.string(),
+	updated_at: z.string(),
+	// TV show fields — catch for any rows missing these columns
 	type: MovieTypeSchema.catch("MOVIE"),
-	show_id: pbNullableString,
-	season_number: pbNullableInt,
+	show_id: z.string().nullable(),
+	season_number: z.number().int().nullable(),
 });
 
 const SyncedMovieSchema = z.object({
@@ -64,10 +34,18 @@ const SyncedMovieSchema = z.object({
 	title: z.string(),
 });
 
+export const SyncConflictSchema = z.object({
+	id: z.string(),
+	title: z.string(),
+	local: SupabaseMovieRecordSchema,
+	remote: SupabaseMovieRecordSchema,
+});
+
 export const SyncResultSchema = z.object({
 	pushedMovies: z.array(SyncedMovieSchema),
 	pulledMovies: z.array(SyncedMovieSchema),
 	deletedMovies: z.array(SyncedMovieSchema),
 	dedupedMovies: z.array(SyncedMovieSchema),
+	conflicts: z.array(SyncConflictSchema),
 	errors: z.array(z.string()),
 });

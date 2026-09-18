@@ -92,12 +92,12 @@ In `src-tauri/gen/android/app/src/main/AndroidManifest.xml`:
 <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 ```
 
-`INTERNET` — required for PocketBase sync and TMDB API calls.
+`INTERNET` — required for Supabase sync and TMDB API calls.
 `ACCESS_NETWORK_STATE` — used by `isOnline()` in the sync service.
 
 **Note:** `tauri-plugin-dialog` handles gallery/media access on Android via the system file picker — no additional `READ_MEDIA_IMAGES` manifest permission is needed because the picker uses Android's built-in content URI system.
 
-**Cleartext HTTP:** `AndroidManifest.xml` uses `android:usesCleartextTraffic="${usesCleartextTraffic}"`. This placeholder is set to `true` for both debug and release in `build.gradle.kts`. Required for HTTP (non-HTTPS) connections to self-hosted PocketBase.
+**Cleartext HTTP:** `AndroidManifest.xml` uses `android:usesCleartextTraffic="${usesCleartextTraffic}"`. Supabase uses HTTPS — cleartext traffic is not required for sync. This placeholder remains in the manifest but no longer needs to be `true`.
 
 ## Safe Areas
 
@@ -212,11 +212,9 @@ adb logcat -s AndroidRuntime:E
 ```
 Look for the Java exception stack trace. Usually a missing permission or failed plugin initialization.
 
-**Network calls work in dev but fail in release (e.g. PocketBase login)**
-Three layers must all be configured — missing any one causes failures:
+**Network calls work in dev but fail in release (e.g. Supabase auth)**
+All Supabase and TMDB calls are routed through Tauri's Rust HTTP client (`tauriFetch` passed as `global.fetch` in `createClient`). This bypasses Android WebView's `shouldInterceptRequest` interception, which is the most common cause of silent network failures in release builds. If a call fails in release only:
 
-1. **OS cleartext traffic** — `build.gradle.kts` must set `manifestPlaceholders["usesCleartextTraffic"] = "true"` inside `getByName("release")`. The debug block already sets this; the release block must set it explicitly or it inherits `false` from `defaultConfig`.
-
-2. **WebView mixed content** — Release builds serve the app from `https://tauri.localhost`. Any `fetch()` to an HTTP URL is blocked as mixed content by default. `MainActivity.kt` overrides `onWebViewCreate` to set `WebSettings.MIXED_CONTENT_ALWAYS_ALLOW`, which permits HTTP requests from the HTTPS WebView origin.
-
-3. **Tauri CSP** — Even with `connect-src http://*` in the CSP, Tauri internally appends `upgrade-insecure-requests`, which silently rewrites `http://` URLs to `https://` before the request is made. This breaks HTTP PocketBase connections regardless of connect-src rules. The fix is `"csp": null` in `tauri.conf.json`, which disables CSP entirely. This is acceptable for a local-first Android app with no web-facing surface.
+1. Confirm `tauriFetch` is wired up in `src/lib/supabase.ts` — it must be passed as `global: { fetch: tauriFetch }` to `createClient`.
+2. Check Tauri capabilities (`src-tauri/capabilities/default.json`) — `http:default` or the relevant `allow-fetch` permission may be missing.
+3. Run `adb logcat | grep -i "tauri\|reqwest"` to see Rust-side HTTP errors.

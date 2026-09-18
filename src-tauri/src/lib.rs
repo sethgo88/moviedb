@@ -91,12 +91,12 @@ async fn write_to_downloads(
     app: tauri::AppHandle,
     filename: String,
     content: String,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let download_dir = app.path().download_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&download_dir).map_err(|e| e.to_string())?;
     let path = download_dir.join(&filename);
     std::fs::write(&path, content.as_bytes()).map_err(|e| e.to_string())?;
-    Ok(())
+    Ok(path.to_string_lossy().to_string())
 }
 
 /// Resize a picked image (already encoded as JPEG on the JS side) and

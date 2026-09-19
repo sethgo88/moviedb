@@ -190,8 +190,8 @@ export async function exportCollectionAsJson(): Promise<string> {
 	const content = JSON.stringify(movies, null, 2);
 	const today = new Date().toISOString().slice(0, 10);
 	const filename = `moviedb-export-${today}.json`;
-	await invoke<string>("write_to_downloads", { filename, content });
-	return filename;
+	const path = await invoke<string>("write_to_downloads", { filename, content });
+	return path;
 }
 
 export async function exportCollectionAsCsv(): Promise<string> {
@@ -211,6 +211,6 @@ export async function exportCollectionAsCsv(): Promise<string> {
 	const content = [header, ...rows].join("\n");
 	const today = new Date().toISOString().slice(0, 10);
 	const filename = `moviedb-export-${today}.csv`;
-	await invoke<string>("write_to_downloads", { filename, content });
-	return filename;
+	const path = await invoke<string>("write_to_downloads", { filename, content });
+	return path;
 }

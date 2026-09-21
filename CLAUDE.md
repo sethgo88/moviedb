@@ -4,7 +4,7 @@
 
 ## Project Overview
 Tauri 2 + React 19 + TypeScript Android app for tracking a personal movie collection.
-Local-first SQLite, synced to self-hosted PocketBase, movie metadata from TMDB API.
+Local-first SQLite, synced to Supabase, movie metadata from TMDB API.
 
 ## Key Commands
 ```bash
@@ -17,7 +17,7 @@ pnpm typecheck     # tsc --noEmit
 ```
 
 ## Stack
-React 19, TanStack Router (memory history), TanStack Query, TanStack Form, Zustand, Zod v4, Tailwind CSS, Biome, tauri-plugin-sql (SQLite), PocketBase (sync), TMDB API
+React 19, TanStack Router (memory history), TanStack Query, TanStack Form, Zustand, Zod v4, Tailwind CSS, Biome, tauri-plugin-sql (SQLite), Supabase (sync), TMDB API
 
 ## Folder Structure
 ```
@@ -30,7 +30,7 @@ src/
   features/movies/         # movies.store, movies.queries, movies.service, movies.schema
   features/sync/           # sync.store, sync.service
   features/tmdb/           # tmdb.service, tmdb.schema
-  lib/                     # db.ts, pocketbase.ts, cn.ts, date.ts
+  lib/                     # db.ts, supabase.ts, database.types.ts, cn.ts, date.ts
   hooks/                   # useDebounce, useOnlineStatus, useAndroidBackButton, useSync
 ```
 

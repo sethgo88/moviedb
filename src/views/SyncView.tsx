@@ -1,22 +1,17 @@
-import { useMutation } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
-import { RefreshCw } from "lucide-react";
-import { useState } from "react";
-import { Button } from "../components/atoms/Button/button";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, RefreshCw } from "lucide-react";
+import { Fragment, useEffect, useState } from "react";
 import { Spinner } from "../components/atoms/Spinner/spinner";
-import { Toast } from "../components/atoms/Toast/toast";
-import { ConfirmSheet } from "../components/molecules/ConfirmSheet/confirm-sheet";
+import { useRunSync } from "../features/sync/sync.queries";
+import { resolveConflict } from "../features/sync/sync.service";
+import { showSyncToast, useSyncStore } from "../features/sync/sync.store";
+import type { SyncConflict } from "../features/sync/sync.types";
+import { movieKeys } from "../features/movies/movies.queries";
 import {
-	usePendingDeleteCount,
-	useRunSync,
-} from "../features/sync/sync.queries";
-import { useSyncStore } from "../features/sync/sync.store";
-import {
-	isPbAuthenticated,
-	isPbConfigured,
-	loginPb,
-	logoutPb,
-} from "../lib/pocketbase";
+	autoLogin,
+	isSupabaseAuthenticated,
+	logoutSupabase,
+} from "../lib/supabase";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -30,141 +25,182 @@ function formatRelative(iso: string): string {
 	return `${Math.floor(hrs / 24)}d ago`;
 }
 
-// ─── Sub-views ───────────────────────────────────────────────────────────────
+// Fields shown in the conflict diff (label → key path on SupabaseMovieRecord).
+const DIFF_FIELDS: { label: string; key: keyof SyncConflict["local"] }[] = [
+	{ label: "Status", key: "status" },
+	{ label: "Format", key: "format" },
+	{ label: "Rating", key: "personal_rating" },
+	{ label: "Year", key: "year" },
+	{ label: "Physical", key: "is_physical" },
+	{ label: "Digital", key: "is_digital" },
+	{ label: "Backed up", key: "is_backed_up" },
+	{ label: "Notes", key: "notes" },
+];
 
-function NotConfiguredState() {
-	const navigate = useNavigate();
-	return (
-		<div className="flex flex-col items-center gap-4 py-20 text-center">
-			<RefreshCw size={40} className="text-white/20" />
-			<p className="text-white/60">No sync server configured.</p>
-			<Button onClick={() => navigate({ to: "/settings" })}>
-				Go to Settings
-			</Button>
-		</div>
-	);
+function formatDiffValue(val: unknown): string {
+	if (val === null || val === undefined) return "—";
+	if (typeof val === "boolean") return val ? "Yes" : "No";
+	return String(val);
 }
 
-function LoginForm({ onSuccess }: { onSuccess: () => void }) {
-	const [email, setEmail] = useState("");
-	const [password, setPassword] = useState("");
-	const {
-		mutate: login,
-		isPending: isLoading,
-		error: loginError,
-	} = useMutation({
-		mutationFn: ({ em, pw }: { em: string; pw: string }) => loginPb(em, pw),
-		onSuccess,
-	});
-	const error =
-		loginError instanceof Error
-			? loginError.message
-			: loginError
-				? "Login failed. Check your credentials."
-				: null;
+// ─── Conflict card ───────────────────────────────────────────────────────────
 
-	function handleLogin() {
-		if (!email.trim() || !password) return;
-		login({ em: email.trim(), pw: password });
+function ConflictCard({
+	conflict,
+	onResolved,
+}: {
+	conflict: SyncConflict;
+	onResolved: () => void;
+}) {
+	const queryClient = useQueryClient();
+	const [resolving, setResolving] = useState(false);
+	const [resolveError, setResolveError] = useState<string | null>(null);
+
+	const changedFields = DIFF_FIELDS.filter(
+		({ key }) => conflict.local[key] !== conflict.remote[key],
+	);
+
+	async function handleResolve(winner: "local" | "remote") {
+		setResolving(true);
+		setResolveError(null);
+		try {
+			await resolveConflict(conflict, winner);
+			useSyncStore.getState().removeConflict(conflict.id);
+			queryClient.invalidateQueries({ queryKey: movieKeys.all });
+			onResolved();
+		} catch (e) {
+			setResolveError(e instanceof Error ? e.message : "Resolution failed");
+		} finally {
+			setResolving(false);
+		}
 	}
 
 	return (
-		<div className="rounded-2xl border border-white/10 bg-gray-900 p-4">
-			<p className="mb-4 text-sm text-white/50">
-				Sign in to your PocketBase instance to enable sync.
-			</p>
+		<div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/5">
+			{/* Header */}
+			<div className="flex items-center gap-2 px-4 py-3">
+				<AlertTriangle size={14} className="shrink-0 text-yellow-400" />
+				<p className="flex-1 text-sm font-semibold text-white">
+					{conflict.title}
+				</p>
+			</div>
 
-			<div className="flex flex-col gap-3">
-				<input
-					type="email"
-					placeholder="Email"
-					value={email}
-					autoComplete="email"
-					onChange={(e) => setEmail(e.target.value)}
-					className="rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-sm text-white placeholder-white/30 outline-none transition-colors focus:border-blue-500"
-				/>
-				<input
-					type="password"
-					placeholder="Password"
-					value={password}
-					autoComplete="current-password"
-					onChange={(e) => setPassword(e.target.value)}
-					onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-					className="rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-sm text-white placeholder-white/30 outline-none transition-colors focus:border-blue-500"
-				/>
-				{error && <p className="text-xs text-red-400">{error}</p>}
+			<div className="h-px bg-white/10" />
+
+			{/* Diff table */}
+			<div className="px-4 py-3">
+				<div className="grid grid-cols-[auto_1fr_1fr] gap-x-3 gap-y-1.5">
+					<div className="text-xs font-semibold text-white/30" />
+					<p className="text-xs font-semibold text-blue-400">Local</p>
+					<p className="text-xs font-semibold text-purple-400">Remote</p>
+					{changedFields.length === 0 ? (
+						<p className="col-span-3 text-xs text-white/40">
+							Timestamps differ only — both versions have identical content.
+						</p>
+					) : (
+						changedFields.map(({ label, key }) => (
+							<Fragment key={label}>
+								<p className="text-xs text-white/40">{label}</p>
+								<p className="truncate text-xs text-white/80">
+									{formatDiffValue(conflict.local[key])}
+								</p>
+								<p className="truncate text-xs text-white/80">
+									{formatDiffValue(conflict.remote[key])}
+								</p>
+							</Fragment>
+						))
+					)}
+					{/* Modified timestamps */}
+					<p className="text-xs text-white/30">Modified</p>
+					<p className="text-xs text-white/50">
+						{formatRelative(conflict.local.updated_at)}
+					</p>
+					<p className="text-xs text-white/50">
+						{formatRelative(conflict.remote.updated_at)}
+					</p>
+				</div>
+			</div>
+
+			<div className="h-px bg-white/10" />
+
+			{resolveError && (
+				<>
+					<div className="h-px bg-white/10" />
+					<p className="px-4 py-2 text-xs text-red-400">{resolveError}</p>
+				</>
+			)}
+
+			<div className="h-px bg-white/10" />
+
+			{/* Resolution buttons */}
+			<div className="flex gap-2 px-4 py-3">
 				<button
 					type="button"
-					disabled={isLoading || !email.trim() || !password}
-					onClick={handleLogin}
-					className="rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white transition-opacity active:opacity-70 disabled:opacity-40"
+					disabled={resolving}
+					onClick={() => handleResolve("local")}
+					className="flex-1 rounded-lg border border-blue-500/40 bg-blue-600/20 py-2 text-xs font-semibold text-blue-300 transition-opacity active:opacity-70 disabled:opacity-40"
 				>
-					{isLoading ? "Signing in…" : "Sign In"}
+					Keep Local
+				</button>
+				<button
+					type="button"
+					disabled={resolving}
+					onClick={() => handleResolve("remote")}
+					className="flex-1 rounded-lg border border-purple-500/40 bg-purple-600/20 py-2 text-xs font-semibold text-purple-300 transition-opacity active:opacity-70 disabled:opacity-40"
+				>
+					Keep Remote
 				</button>
 			</div>
 		</div>
 	);
 }
 
-function SyncControls({ onLogout }: { onLogout: () => void }) {
-	const { isSyncing, lastSyncedAt, error } = useSyncStore();
-	const { data: pendingDeletes = 0 } = usePendingDeleteCount();
-	const { mutate: runSync, data: syncResult } = useRunSync();
-	const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-	const [toast, setToast] = useState<{
-		message: string;
-		variant: "success" | "error";
-	} | null>(null);
+// ─── Signing-in state ────────────────────────────────────────────────────────
 
-	function showToast(
-		message: string,
-		variant: "success" | "error" = "success",
-	) {
-		setToast({ message, variant });
-		setTimeout(() => setToast(null), 3000);
-	}
+function SigningInState({ error }: { error: string | null }) {
+	return (
+		<div className="flex flex-col items-center gap-3 py-8 text-center">
+			{error ? (
+				<>
+					<AlertTriangle className="h-8 w-8 text-red-400" />
+					<p className="text-sm text-red-400">{error}</p>
+				</>
+			) : (
+				<>
+					<Spinner />
+					<p className="text-sm text-white/50">Signing in…</p>
+				</>
+			)}
+		</div>
+	);
+}
+
+// ─── Sync controls ───────────────────────────────────────────────────────────
+
+function SyncControls({ onLogout }: { onLogout: () => void }) {
+	const { isSyncing, lastSyncedAt, error, conflicts } = useSyncStore();
+	const { mutate: runSync, data: syncResult } = useRunSync();
 
 	function handleSync() {
-		if (pendingDeletes > 0) {
-			setShowDeleteConfirm(true);
-			return;
-		}
-		runSync(false, {
+		runSync(undefined, {
 			onSuccess: (result) => {
 				const total =
 					result.pushedMovies.length +
 					result.pulledMovies.length +
 					result.deletedMovies.length +
 					result.dedupedMovies.length;
-				showToast(
+				showSyncToast(
 					total > 0
 						? `Synced ${total} item${total === 1 ? "" : "s"}`
 						: "Already up to date",
+					"success",
 				);
 			},
 			onError: (e) => {
-				showToast(e instanceof Error ? e.message : "Sync failed", "error");
-			},
-		});
-	}
-
-	function handleSyncWithDeletes() {
-		setShowDeleteConfirm(false);
-		runSync(true, {
-			onSuccess: (result) => {
-				const total =
-					result.pushedMovies.length +
-					result.pulledMovies.length +
-					result.deletedMovies.length +
-					result.dedupedMovies.length;
-				showToast(
-					total > 0
-						? `Synced ${total} item${total === 1 ? "" : "s"}`
-						: "Already up to date",
+				showSyncToast(
+					e instanceof Error ? e.message : "Sync failed",
+					"error",
 				);
-			},
-			onError: (e) => {
-				showToast(e instanceof Error ? e.message : "Sync failed", "error");
 			},
 		});
 	}
@@ -179,11 +215,6 @@ function SyncControls({ onLogout }: { onLogout: () => void }) {
 
 	return (
 		<div className="flex flex-col gap-4">
-			<Toast
-				message={toast?.message ?? ""}
-				visible={toast !== null}
-				variant={toast?.variant}
-			/>
 
 			{/* Sync button + status */}
 			<div className="rounded-2xl border border-white/10 bg-gray-900">
@@ -206,24 +237,6 @@ function SyncControls({ onLogout }: { onLogout: () => void }) {
 						{isSyncing ? "Syncing…" : "Sync Now"}
 					</button>
 				</div>
-
-				{/* Pending deletes warning */}
-				{pendingDeletes > 0 && (
-					<>
-						<div className="h-px bg-white/10" />
-						<div className="flex items-center gap-3 px-4 py-3">
-							<div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-yellow-500/20 text-xs font-bold text-yellow-400">
-								{pendingDeletes}
-							</div>
-							<p className="text-xs text-yellow-400">
-								{pendingDeletes === 1
-									? "1 movie pending deletion"
-									: `${pendingDeletes} movies pending deletion`}{" "}
-								— will be confirmed on next sync.
-							</p>
-						</div>
-					</>
-				)}
 
 				{/* Sync error */}
 				{error && (
@@ -331,6 +344,24 @@ function SyncControls({ onLogout }: { onLogout: () => void }) {
 				)}
 			</div>
 
+			{/* Conflict resolution cards */}
+			{conflicts.length > 0 && (
+				<div className="flex flex-col gap-3">
+					<h3 className="text-xs font-semibold uppercase tracking-widest text-yellow-400">
+						Conflicts ({conflicts.length})
+					</h3>
+					{conflicts.map((conflict) => (
+						<ConflictCard
+							key={conflict.id}
+							conflict={conflict}
+							onResolved={() =>
+								showSyncToast(`Resolved: ${conflict.title}`, "success")
+							}
+						/>
+					))}
+				</div>
+			)}
+
 			{/* Sign out */}
 			<div className="rounded-2xl border border-white/10 bg-gray-900">
 				<button
@@ -341,17 +372,6 @@ function SyncControls({ onLogout }: { onLogout: () => void }) {
 					Sign Out
 				</button>
 			</div>
-
-			{/* Pending deletes confirm */}
-			<ConfirmSheet
-				isOpen={showDeleteConfirm}
-				title="Pending Deletions"
-				message={`You have ${pendingDeletes} movie${pendingDeletes === 1 ? "" : "s"} queued for deletion. Syncing will permanently remove ${pendingDeletes === 1 ? "it" : "them"} from PocketBase. Continue?`}
-				confirmLabel="Sync & Delete"
-				isDangerous
-				onConfirm={handleSyncWithDeletes}
-				onCancel={() => setShowDeleteConfirm(false)}
-			/>
 		</div>
 	);
 }
@@ -359,14 +379,40 @@ function SyncControls({ onLogout }: { onLogout: () => void }) {
 // ─── Main view ───────────────────────────────────────────────────────────────
 
 export function SyncView() {
-	// Local state tracks auth so the view re-renders after login/logout
-	// without requiring a full app reload.
-	const [isAuthenticated, setIsAuthenticated] = useState(isPbAuthenticated);
-	const configured = isPbConfigured();
+	const queryClient = useQueryClient();
+	const [loginError, setLoginError] = useState<string | null>(null);
 
-	function handleLogout() {
-		logoutPb();
-		setIsAuthenticated(false);
+	// Auth state is async — use a query so it loads cleanly.
+	const { data: isAuthenticated, isLoading } = useQuery({
+		queryKey: ["supabase-auth"],
+		queryFn: isSupabaseAuthenticated,
+	});
+
+	// Auto-login when session is confirmed missing.
+	const { mutate: doAutoLogin } = useMutation({
+		mutationFn: autoLogin,
+		onSuccess: () => {
+			setLoginError(null);
+			queryClient.setQueryData(["supabase-auth"], true);
+		},
+		onError: (e) => {
+			setLoginError(e instanceof Error ? e.message : "Sign-in failed");
+		},
+	});
+
+	useEffect(() => {
+		if (!isLoading && isAuthenticated === false && !loginError) {
+			doAutoLogin();
+		}
+	}, [isLoading, isAuthenticated, loginError, doAutoLogin]);
+
+	async function handleLogout() {
+		try {
+			await logoutSupabase();
+		} catch {
+			// Clear local session regardless — best-effort remote sign-out.
+		}
+		queryClient.setQueryData(["supabase-auth"], false);
 	}
 
 	return (
@@ -377,19 +423,12 @@ export function SyncView() {
 			</div>
 
 			<div className="flex flex-col gap-6 p-4">
-				{!configured ? (
-					<NotConfiguredState />
-				) : !isAuthenticated ? (
-					<section className="flex flex-col gap-3">
-						<h2 className="text-xs font-semibold uppercase tracking-widest text-white/40">
-							PocketBase Sign In
-						</h2>
-						<LoginForm onSuccess={() => setIsAuthenticated(true)} />
-					</section>
+				{!isAuthenticated || isLoading ? (
+					<SigningInState error={loginError} />
 				) : (
 					<section className="flex flex-col gap-3">
 						<h2 className="text-xs font-semibold uppercase tracking-widest text-white/40">
-							PocketBase Sync
+							Supabase Sync
 						</h2>
 						<SyncControls onLogout={handleLogout} />
 					</section>

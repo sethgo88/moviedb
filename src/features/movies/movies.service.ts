@@ -185,17 +185,16 @@ export async function checkTitleYearSimilar(
 	return (rows[0]?.count ?? 0) > 0;
 }
 
-export async function exportCollectionAsJson(): Promise<void> {
+export async function exportCollectionAsJson(): Promise<string> {
 	const movies = await getAllMovies();
 	const content = JSON.stringify(movies, null, 2);
 	const today = new Date().toISOString().slice(0, 10);
-	await invoke("write_to_downloads", {
-		filename: `moviedb-export-${today}.json`,
-		content,
-	});
+	const filename = `moviedb-export-${today}.json`;
+	const path = await invoke<string>("write_to_downloads", { filename, content });
+	return path;
 }
 
-export async function exportCollectionAsCsv(): Promise<void> {
+export async function exportCollectionAsCsv(): Promise<string> {
 	const movies = await getAllMovies();
 	const header = "title,year,format,status,tmdb_rating,personal_rating";
 	const rows = movies.map((m) => {
@@ -211,8 +210,7 @@ export async function exportCollectionAsCsv(): Promise<void> {
 	});
 	const content = [header, ...rows].join("\n");
 	const today = new Date().toISOString().slice(0, 10);
-	await invoke("write_to_downloads", {
-		filename: `moviedb-export-${today}.csv`,
-		content,
-	});
+	const filename = `moviedb-export-${today}.csv`;
+	const path = await invoke<string>("write_to_downloads", { filename, content });
+	return path;
 }

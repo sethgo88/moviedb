@@ -74,14 +74,14 @@ export function SettingsView() {
 
 	const { mutate: doExportJson, isPending: isExportingJson } = useMutation({
 		mutationFn: exportCollectionAsJson,
-		onSuccess: () => showToast("Exported to Downloads"),
-		onError: () => showToast("Export failed", "error"),
+		onSuccess: (path) => showToast(`Saved to: ${path}`),
+		onError: (e) => showToast(`Export failed: ${String(e)}`, "error"),
 	});
 
 	const { mutate: doExportCsv, isPending: isExportingCsv } = useMutation({
 		mutationFn: exportCollectionAsCsv,
-		onSuccess: () => showToast("Exported to Downloads"),
-		onError: () => showToast("Export failed", "error"),
+		onSuccess: (path) => showToast(`Saved to: ${path}`),
+		onError: (e) => showToast(`Export failed: ${String(e)}`, "error"),
 	});
 
 	return (

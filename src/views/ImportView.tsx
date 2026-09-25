@@ -77,7 +77,8 @@ export function ImportView() {
 			const { imported, updated, skipped } = await executeImport(rows);
 			await queryClient.invalidateQueries({ queryKey: ["movies"] });
 			const parts = [];
-			if (imported > 0) parts.push(`Imported ${imported} movie${imported === 1 ? "" : "s"}`);
+			if (imported > 0)
+				parts.push(`Imported ${imported} movie${imported === 1 ? "" : "s"}`);
 			if (updated > 0) parts.push(`updated ${updated} quality`);
 			if (skipped > 0) parts.push(`skipped ${skipped}`);
 			showToast(parts.join(", "));
@@ -336,11 +337,7 @@ export function ImportView() {
 												}`}
 												onClick={() => toggleSkip(index)}
 											>
-												{row.skip
-													? "Skip"
-													: isQualityUpdate
-														? "Update"
-														: "Add"}
+												{row.skip ? "Skip" : isQualityUpdate ? "Update" : "Add"}
 											</button>
 										</li>
 									);

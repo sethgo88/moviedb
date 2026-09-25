@@ -34,9 +34,9 @@ export function useCreateMovie() {
 	const queryClient = useQueryClient();
 	return useMutation({
 		mutationFn: (data: NewMovie) => createMovie(data),
-		onSuccess: () => {
+		onSuccess: (created) => {
 			queryClient.invalidateQueries({ queryKey: movieKeys.all });
-			useSyncStore.getState().requestSync();
+			useSyncStore.getState().requestSyncMovie(created.id);
 		},
 	});
 }
@@ -49,7 +49,7 @@ export function useUpdateMovie() {
 		onSuccess: (_result, { id }) => {
 			queryClient.invalidateQueries({ queryKey: movieKeys.all });
 			queryClient.invalidateQueries({ queryKey: movieKeys.detail(id) });
-			useSyncStore.getState().requestSync();
+			useSyncStore.getState().requestSyncMovie(id);
 		},
 	});
 }
@@ -58,9 +58,9 @@ export function useSoftDeleteMovie() {
 	const queryClient = useQueryClient();
 	return useMutation({
 		mutationFn: (id: string) => softDeleteMovie(id),
-		onSuccess: () => {
+		onSuccess: (_result, id) => {
 			queryClient.invalidateQueries({ queryKey: movieKeys.all });
-			useSyncStore.getState().requestSync();
+			useSyncStore.getState().requestSyncMovie(id);
 		},
 	});
 }

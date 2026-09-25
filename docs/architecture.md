@@ -45,7 +45,7 @@ All business logic. No JSX. Divided by domain:
 | `movies` | `movies.schema.ts` | Zod schemas for the `Movie` domain |
 | `movies` | `movies.types.ts` | TypeScript types (inferred from Zod where possible) |
 | `sync` | `sync.service.ts` | Push/pull logic between SQLite and Supabase; `resolveConflict()` |
-| `sync` | `sync.store.ts` | Sync state — isSyncing, lastSyncedAt, errors, conflicts, syncTriggerAt |
+| `sync` | `sync.store.ts` | Sync state — isSyncing, lastSyncedAt, errors, conflicts, pendingSyncMovieId |
 | `tmdb` | `tmdb.service.ts` | TMDB REST API calls |
 | `tmdb` | `tmdb.queries.ts` | TanStack Query hooks for TMDB search/details |
 | `tmdb` | `tmdb.schema.ts` | Zod schemas for TMDB API responses |
@@ -59,7 +59,7 @@ React-free singletons and utilities:
 
 ### `src-tauri/src/`
 Rust backend. Currently handles:
-- SQLite plugin registration and migrations (v1: initial schema, v2: personal_rating REAL)
+- SQLite plugin registration and migrations (v1: initial schema, v2: personal_rating REAL, v3: type/show_id/season_number columns, v4: sync_meta PRIMARY KEY fix)
 - `save_custom_poster` — receives a base64 JPEG data URL from JS; currently unused (custom posters are stored as data URLs directly in `poster_url`)
 - `cache_poster(tmdb_id, url)` — fetches TMDB poster via reqwest, saves to poster-cache, returns data URL
 - `get_cached_poster(tmdb_id)` — returns cached poster as data URL or null
@@ -119,7 +119,7 @@ Auto-sync fires from three places — all call the same `runSync()` under the ho
 
 1. **On mount** (`useAutoSync` in `CollectionView`) — fires once if last sync > 5 min ago or never.
 2. **On window focus** (`useAutoSync`) — fires if stale when app is foregrounded.
-3. **After any movie mutation** (`movies.queries.ts`) — `requestSync()` sets a Zustand flag; `useAutoSync` debounces 1500 ms then calls `runSync()`. Rapid edits batch into a single sync.
+3. **After any movie mutation** (`movies.queries.ts`) — `requestSyncMovie(id)` sets the movie ID in Zustand; `useAutoSync` debounces 1500 ms then calls `pushOneMovie(id)` to push only that record. Rapid edits to the same movie coalesce into a single push.
 
 The manual "Sync Now" button in SyncView also calls `runSync()` directly.
 

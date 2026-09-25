@@ -24,11 +24,11 @@ import {
 	fetchSeasonDetails,
 	TMDB_POSTER_BASE,
 } from "@/features/tmdb/tmdb.service";
+import { useTmdbStore } from "@/features/tmdb/tmdb.store";
 import type {
 	TmdbSearchResult,
 	TmdbTvSearchResult,
 } from "@/features/tmdb/tmdb.types";
-import { useTmdbStore } from "@/features/tmdb/tmdb.store";
 
 const STATUS_OPTIONS: { label: string; value: MovieStatus }[] = [
 	{ label: "Owned", value: "OWNED" },
@@ -201,8 +201,7 @@ export function AddMovieView() {
 	const pendingSelection = useTmdbStore((s) => s.pendingSelection);
 	const setPendingSelection = useTmdbStore((s) => s.setPendingSelection);
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: mount-only — pendingSelection is
-	// read once on mount and immediately cleared; handlers are hoisted function declarations
+	// biome-ignore lint/correctness/useExhaustiveDependencies: mount-only — pendingSelection read once on mount and cleared; handlers are hoisted function declarations
 	useEffect(() => {
 		if (!pendingSelection) return;
 		const snapshot = pendingSelection;

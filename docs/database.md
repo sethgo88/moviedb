@@ -68,13 +68,12 @@ END;
 
 ```sql
 CREATE TABLE sync_meta (
-    last_synced_at TEXT  -- null = never synced
+    id             INTEGER PRIMARY KEY,  -- always 1 (singleton row)
+    last_synced_at TEXT                  -- null = never synced
 );
-
-INSERT INTO sync_meta (last_synced_at) VALUES (NULL);
 ```
 
-Stores the timestamp of the last successful sync. The sync service queries this to know what to push and pull.
+Singleton table — always exactly one row with `id = 1`. The `INTEGER PRIMARY KEY` is required so `INSERT OR REPLACE INTO sync_meta(id, last_synced_at) VALUES(1, $1)` replaces the existing row rather than appending a new one. Without the PK, `LIMIT 1` would return the original null row forever (migration v4 fixed this).
 
 ---
 
@@ -112,6 +111,19 @@ let migrations = vec![
             ALTER TABLE movies ADD COLUMN type TEXT NOT NULL DEFAULT 'MOVIE';
             ALTER TABLE movies ADD COLUMN show_id TEXT;
             ALTER TABLE movies ADD COLUMN season_number INTEGER;
+        ",
+        kind: tauri_plugin_sql::MigrationKind::Up,
+    },
+    tauri_plugin_sql::Migration {
+        version: 4,
+        description: "fix_sync_meta_primary_key",
+        sql: "
+            -- Recreate sync_meta with id INTEGER PRIMARY KEY so INSERT OR REPLACE
+            -- can replace the singleton row instead of appending a new one.
+            CREATE TABLE sync_meta_new (id INTEGER PRIMARY KEY, last_synced_at TEXT);
+            INSERT INTO sync_meta_new (id, last_synced_at) SELECT 1, MAX(last_synced_at) FROM sync_meta;
+            DROP TABLE sync_meta;
+            ALTER TABLE sync_meta_new RENAME TO sync_meta;
         ",
         kind: tauri_plugin_sql::MigrationKind::Up,
     },

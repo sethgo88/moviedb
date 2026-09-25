@@ -1,10 +1,7 @@
 import { getDb } from "../../lib/db";
-import { getSupabase } from "../../lib/supabase";
+import { autoLogin, getSupabase } from "../../lib/supabase";
 import { cachePosterFromUrl } from "../tmdb/tmdb.service";
-import {
-	SupabaseMovieRecordSchema,
-	SyncResultSchema,
-} from "./sync.schema";
+import { SupabaseMovieRecordSchema, SyncResultSchema } from "./sync.schema";
 import { useSyncStore } from "./sync.store";
 import type { SyncConflict, SyncResult } from "./sync.types";
 
@@ -38,6 +35,34 @@ type LocalMovieRow = {
 // converted back when writing to Postgres (which stores proper booleans).
 function boolInt(b: boolean): number {
 	return b ? 1 : 0;
+}
+
+// Content fields compared when detecting whether a conflict is real or
+// timestamp-only. Excludes updated_at / created_at intentionally.
+const CONTENT_KEYS: (keyof SyncConflict["local"])[] = [
+	"tmdb_id",
+	"title",
+	"year",
+	"poster_url",
+	"tmdb_rating",
+	"personal_rating",
+	"status",
+	"format",
+	"is_physical",
+	"is_digital",
+	"is_backed_up",
+	"notes",
+	"deleted_at",
+	"type",
+	"show_id",
+	"season_number",
+];
+
+function isContentIdentical(
+	a: SyncConflict["local"],
+	b: SyncConflict["local"],
+): boolean {
+	return CONTENT_KEYS.every((k) => a[k] === b[k]);
 }
 
 // Convert a local SQLite row to the Supabase record shape (for conflict diffs).
@@ -81,9 +106,9 @@ async function readLastSyncedAt(db: DbHandle): Promise<string | null> {
 }
 
 async function writeLastSyncedAt(db: DbHandle, ts: string): Promise<void> {
-	// INSERT OR REPLACE handles both fresh installs (no row yet) and updates.
+	// INSERT OR REPLACE requires a PK match to replace; id=1 is the singleton row.
 	await db.execute(
-		"INSERT OR REPLACE INTO sync_meta(last_synced_at) VALUES($1)",
+		"INSERT OR REPLACE INTO sync_meta(id, last_synced_at) VALUES(1, $1)",
 		[ts],
 	);
 }
@@ -111,20 +136,32 @@ export async function runSync(): Promise<SyncResult> {
 	try {
 		const supabase = getSupabase();
 
+		console.log("[sync] starting — checking auth session");
+		const {
+			data: { session: existingSession },
+			error: sessionErr,
+		} = await supabase.auth.getSession();
+		console.log("[sync] getSession result:", { hasSession: !!existingSession, error: sessionErr?.message });
+		if (!existingSession) {
+			console.log("[sync] no session — attempting autoLogin");
+			await autoLogin();
+			console.log("[sync] autoLogin complete");
+		}
 		const {
 			data: { session },
 		} = await supabase.auth.getSession();
 		if (!session) {
-			throw new Error(
-				"Not authenticated with Supabase. Please sign in in the Sync tab.",
-			);
+			throw new Error("Sign-in failed — check Tailscale connectivity.");
 		}
+		console.log("[sync] authenticated as", session.user.email);
 
 		const db = await getDb();
 		const lastSyncedAt = await readLastSyncedAt(db);
+		console.log("[sync] lastSyncedAt:", lastSyncedAt ?? "null (first sync)");
 
 		// --- PENDING DELETES ---
 		const pendingCount = await getPendingDeleteCount(db);
+		console.log("[sync] pending deletes:", pendingCount);
 
 		// --- PUSH DELETES ---
 		if (pendingCount > 0) {
@@ -153,10 +190,15 @@ export async function runSync(): Promise<SyncResult> {
 
 		// Fetch all remote rows (id + updated_at) upfront for existence checks,
 		// dedup, and conflict detection.
+		console.log("[sync] fetching remote meta (all movie IDs + updated_at)");
 		const { data: remoteMetaRaw, error: remoteMetaError } = await supabase
 			.from("movies")
 			.select("id, updated_at");
-		if (remoteMetaError) throw remoteMetaError;
+		if (remoteMetaError) {
+			console.error("[sync] remote meta fetch failed:", remoteMetaError);
+			throw remoteMetaError;
+		}
+		console.log("[sync] remote meta rows:", remoteMetaRaw?.length ?? 0);
 		// Map<id, updated_at> — used to detect conflicts and for pull dedup.
 		// Rows with null updated_at (trigger failure) are excluded so they fall
 		// through to a clean push rather than silently missing conflict detection.
@@ -198,10 +240,10 @@ export async function runSync(): Promise<SyncResult> {
 			const [, ...strays] = members;
 			for (const stray of strays) {
 				const now = new Date().toISOString();
-				await db.execute(
-					"UPDATE movies SET deleted_at = $1 WHERE id = $2",
-					[now, stray.id],
-				);
+				await db.execute("UPDATE movies SET deleted_at = $1 WHERE id = $2", [
+					now,
+					stray.id,
+				]);
 				dedupedMovies.push({ id: stray.id, title: stray.title });
 				console.log(
 					`[sync] dedup: soft-deleted stray "${stray.title}" (${stray.id})`,
@@ -213,13 +255,84 @@ export async function runSync(): Promise<SyncResult> {
 		// Push a row if it is missing from Supabase (never synced) or updated since
 		// the last sync. If both local and remote were modified since lastSyncedAt,
 		// that is a true conflict — hold the row back for user resolution.
+		console.log("[sync] reading local rows...");
 		const localRows = await db.select<LocalMovieRow[]>(
 			"SELECT * FROM movies WHERE deleted_at IS NULL",
 		);
+		console.log("[sync] local rows:", localRows.length, "| remote rows:", remoteMeta.size);
 
 		// Track pushed and conflicted IDs so the pull step can skip them.
 		const pushedIds = new Set<string>();
 		const conflictedIds = new Set<string>();
+
+		// Pass 1: identify conflict candidates (both sides modified since lastSyncedAt).
+		// Batch-fetch their full remote records in one request instead of N individual calls.
+		const conflictCandidateIds: string[] = [];
+		for (const row of localRows) {
+			const remoteUpdatedAt = remoteMeta.get(row.id);
+			if (
+				remoteUpdatedAt !== undefined &&
+				lastSyncedAt &&
+				row.updated_at > lastSyncedAt &&
+				remoteUpdatedAt > lastSyncedAt
+			) {
+				conflictCandidateIds.push(row.id);
+			}
+		}
+
+		console.log("[sync] conflict candidates:", conflictCandidateIds.length);
+
+		const remoteConflictMap = new Map<string, SyncConflict["local"]>();
+		if (conflictCandidateIds.length > 0) {
+			console.log("[sync] fetching conflict candidate full records (batch)...");
+			// Split into chunks of 50 to avoid URL length limits on .in() queries.
+			// Supabase sends the ID list as a query param — 923 UUIDs ≈ 33KB URL, which
+			// most servers reject. 50 per chunk keeps each request well under 2KB.
+			for (let ci = 0; ci < conflictCandidateIds.length; ci += 50) {
+				const idChunk = conflictCandidateIds.slice(ci, ci + 50);
+				console.log(`[sync] conflict fetch chunk ${ci}–${ci + idChunk.length}`);
+				const { data: remoteConflictRaw, error: conflictFetchErr } =
+					await supabase
+						.from("movies")
+						.select("*")
+						.in("id", idChunk);
+				if (conflictFetchErr) {
+					console.error("[sync] conflict fetch error:", conflictFetchErr);
+					throw conflictFetchErr;
+				}
+				for (const r of remoteConflictRaw ?? []) {
+					const parsed = SupabaseMovieRecordSchema.parse(r);
+					remoteConflictMap.set(parsed.id, parsed);
+				}
+			}
+			console.log("[sync] conflict records fetched:", remoteConflictMap.size);
+		}
+
+		// Pass 2: classify rows — conflict, skip, or collect for batch push.
+		type PushPayload = {
+			id: string;
+			tmdb_id: number | null;
+			title: string;
+			year: number | null;
+			poster_url: string | null;
+			tmdb_rating: number | null;
+			personal_rating: number | null;
+			status: string;
+			format: string;
+			is_physical: boolean;
+			is_digital: boolean;
+			is_backed_up: boolean;
+			notes: string | null;
+			deleted_at: string | null;
+			created_at: string;
+			updated_at: string;
+			type: string;
+			show_id: string | null;
+			season_number: number | null;
+			user_id: string;
+		};
+		const pushPayloads: PushPayload[] = [];
+		const pushMeta: { id: string; title: string }[] = [];
 
 		for (const row of localRows) {
 			const remoteUpdatedAt = remoteMeta.get(row.id);
@@ -231,21 +344,22 @@ export async function runSync(): Promise<SyncResult> {
 
 			if (!isInRemote || localModified) {
 				// Conflict: both sides modified since last sync.
-				// Hold back — the user will resolve via the conflict card in SyncView.
 				if (
 					isInRemote &&
 					lastSyncedAt &&
 					row.updated_at > lastSyncedAt &&
 					remoteUpdatedAt > lastSyncedAt
 				) {
-					try {
-						const { data: remoteRaw, error: fetchErr } = await supabase
-							.from("movies")
-							.select("*")
-							.eq("id", row.id)
-							.single();
-						if (fetchErr) throw fetchErr;
-						const remoteRecord = SupabaseMovieRecordSchema.parse(remoteRaw);
+					const remoteRecord = remoteConflictMap.get(row.id);
+					if (!remoteRecord) {
+						// Couldn't fetch remote record — skip to avoid data loss.
+						errors.push(
+							`Conflict detection failed for "${row.title}": remote record not found`,
+						);
+						continue;
+					}
+					if (!isContentIdentical(localToSupabaseRecord(row), remoteRecord)) {
+						// Real conflict — hold back for user resolution.
 						conflicts.push({
 							id: row.id,
 							title: row.title,
@@ -253,60 +367,70 @@ export async function runSync(): Promise<SyncResult> {
 							remote: remoteRecord,
 						});
 						conflictedIds.add(row.id);
-					} catch (e) {
-						const msg = `Conflict detection failed for "${row.title}": ${String(e)}`;
-						console.error("[sync] conflict error:", msg, e);
-						errors.push(msg);
+						continue;
 					}
-					continue; // skip push — let user decide
+					// Timestamp-only conflict — fall through to push.
 				}
 
-				// Clean push: local is ahead or record is new.
-				try {
-					// Custom posters are base64 data URLs — too large for Supabase
-					// and local-only by design. Only sync TMDB HTTPS URLs.
-					const posterUrl = row.poster_url?.startsWith("data:")
-						? null
-						: row.poster_url;
+				// Clean push: local is ahead, record is new, or timestamp-only conflict.
+				// Custom posters are base64 data URLs — too large for Supabase
+				// and local-only by design. Only sync TMDB HTTPS URLs.
+				const posterUrl = row.poster_url?.startsWith("data:")
+					? null
+					: row.poster_url;
 
-					const payload = {
-						id: row.id,
-						tmdb_id: row.tmdb_id,
-						title: row.title,
-						year: row.year,
-						poster_url: posterUrl,
-						tmdb_rating: row.tmdb_rating,
-						personal_rating: row.personal_rating,
-						status: row.status,
-						format: row.format,
-						// SQLite stores booleans as 0/1; Postgres needs actual booleans.
-						is_physical: Boolean(row.is_physical),
-						is_digital: Boolean(row.is_digital),
-						is_backed_up: Boolean(row.is_backed_up),
-						notes: row.notes,
-						deleted_at: row.deleted_at,
-						created_at: row.created_at,
-						// Sync exception: we explicitly carry the SQLite updated_at across
-						// to preserve last-write-wins semantics across devices. The Postgres
-						// trigger is intentionally overridden here — see sync.md.
-						updated_at: row.updated_at,
-						type: row.type,
-						show_id: row.show_id,
-						season_number: row.season_number,
-						user_id: session.user.id,
-					};
+				pushPayloads.push({
+					id: row.id,
+					tmdb_id: row.tmdb_id,
+					title: row.title,
+					year: row.year,
+					poster_url: posterUrl,
+					tmdb_rating: row.tmdb_rating,
+					personal_rating: row.personal_rating,
+					status: row.status,
+					format: row.format,
+					// SQLite stores booleans as 0/1; Postgres needs actual booleans.
+					is_physical: Boolean(row.is_physical),
+					is_digital: Boolean(row.is_digital),
+					is_backed_up: Boolean(row.is_backed_up),
+					notes: row.notes,
+					deleted_at: row.deleted_at,
+					created_at: row.created_at || new Date().toISOString(),
+					// Sync exception: we explicitly carry the SQLite updated_at across
+					// to preserve last-write-wins semantics across devices. The Postgres
+					// trigger is intentionally overridden here — see sync.md.
+					updated_at: row.updated_at || new Date().toISOString(),
+					type: row.type,
+					show_id: row.show_id,
+					season_number: row.season_number,
+					user_id: session.user.id,
+				});
+				pushMeta.push({ id: row.id, title: row.title });
+			}
+		}
 
-					const { error } = await supabase
-						.from("movies")
-						.upsert(payload, { onConflict: "id" });
-					if (error) throw error;
+		console.log("[sync] push payloads:", pushPayloads.length, "| conflicts:", conflicts.length);
+		if (pushPayloads.length > 0) {
+			console.log("[sync] push sample:", JSON.stringify(pushPayloads[0]).slice(0, 200));
+		}
 
-					pushedIds.add(row.id);
-					pushedMovies.push({ id: row.id, title: row.title });
-				} catch (e) {
-					const msg = `Failed to push movie ${row.id}: ${String(e)}`;
-					console.error("[sync] push error:", msg, e);
-					errors.push(msg);
+		// Batch upsert in chunks of 500 (Supabase row limit per request).
+		for (let i = 0; i < pushPayloads.length; i += 500) {
+			const chunk = pushPayloads.slice(i, i + 500);
+			const meta = pushMeta.slice(i, i + 500);
+			console.log(`[sync] upserting chunk ${i}–${i + chunk.length}...`);
+			const { error } = await supabase
+				.from("movies")
+				.upsert(chunk, { onConflict: "id" });
+			if (error) {
+				const msg = `Failed to push batch (rows ${i}–${i + chunk.length}): ${error.message}`;
+				console.error("[sync] push error:", msg, JSON.stringify(error));
+				errors.push(msg);
+			} else {
+				console.log(`[sync] upsert chunk OK — ${chunk.length} rows`);
+				for (const m of meta) {
+					pushedIds.add(m.id);
+					pushedMovies.push(m);
 				}
 			}
 		}
@@ -319,12 +443,35 @@ export async function runSync(): Promise<SyncResult> {
 		// phase above — pulling soft-deleted rows would cause a ping-pong cycle
 		// where a remote soft-delete is inserted locally, then re-pushed as a
 		// pending delete, then hard-deleted from Supabase, then pulled again.
+		console.log("[sync] pull — lastSyncedAt filter:", lastSyncedAt ?? "none (pulling all)");
 		let pullQuery = supabase.from("movies").select("*").is("deleted_at", null);
 		if (lastSyncedAt) {
 			pullQuery = pullQuery.gte("updated_at", lastSyncedAt);
 		}
 		const { data: remoteRecordsRaw, error: pullError } = await pullQuery;
-		if (pullError) throw pullError;
+		if (pullError) {
+			console.error("[sync] pull error:", pullError);
+			throw pullError;
+		}
+		console.log("[sync] pull returned:", remoteRecordsRaw?.length ?? 0, "records");
+
+		// Pre-load local tmdb index for O(1) dedup checks in the pull loop.
+		// Avoids one SQLite SELECT per incoming remote record.
+		const localTmdbIndex = await db.select<
+			{
+				id: string;
+				tmdb_id: number;
+				type: string;
+				season_number: number | null;
+			}[]
+		>(
+			"SELECT id, tmdb_id, type, season_number FROM movies WHERE deleted_at IS NULL AND tmdb_id IS NOT NULL",
+		);
+		const localTmdbMap = new Map<string, string>(); // "tmdb_id|type|season" → local id
+		for (const r of localTmdbIndex) {
+			const key = `${r.tmdb_id}|${r.type}|${r.season_number ?? -1}`;
+			localTmdbMap.set(key, r.id);
+		}
 
 		for (const record of remoteRecordsRaw ?? []) {
 			try {
@@ -337,36 +484,14 @@ export async function runSync(): Promise<SyncResult> {
 				// same TMDB content, the incoming record is a stray duplicate.
 				// Keep local, delete the duplicate from Supabase, skip insert.
 				if (validated.tmdb_id) {
-					let dupeQuery: string;
-					let dupeParams: unknown[];
-
-					if (
-						validated.type === "TV_SEASON" &&
-						validated.season_number != null
-					) {
-						dupeQuery =
-							"SELECT id FROM movies WHERE tmdb_id = $1 AND season_number = $2 AND type = 'TV_SEASON' AND id != $3 AND deleted_at IS NULL LIMIT 1";
-						dupeParams = [
-							validated.tmdb_id,
-							validated.season_number,
-							validated.id,
-						];
-					} else {
-						dupeQuery =
-							"SELECT id FROM movies WHERE tmdb_id = $1 AND type = $2 AND id != $3 AND deleted_at IS NULL LIMIT 1";
-						dupeParams = [validated.tmdb_id, validated.type, validated.id];
-					}
-
-					const dupeRows = await db.select<{ id: string }[]>(
-						dupeQuery,
-						dupeParams,
-					);
-					if (dupeRows.length > 0) {
+					const key =
+						validated.type === "TV_SEASON" && validated.season_number != null
+							? `${validated.tmdb_id}|TV_SEASON|${validated.season_number}`
+							: `${validated.tmdb_id}|${validated.type}|-1`;
+					const localMatchId = localTmdbMap.get(key);
+					if (localMatchId && localMatchId !== validated.id) {
 						try {
-							await supabase
-									.from("movies")
-									.delete()
-									.eq("id", validated.id);
+							await supabase.from("movies").delete().eq("id", validated.id);
 						} catch {
 							// best-effort — stray record may already be gone
 						}
@@ -436,6 +561,7 @@ export async function runSync(): Promise<SyncResult> {
 		}
 
 		// --- UPDATE CHECKPOINT ---
+		console.log("[sync] DONE — pushed:", pushedMovies.length, "pulled:", pulledMovies.length, "deleted:", deletedMovies.length, "errors:", errors.length);
 		await writeLastSyncedAt(db, syncStartedAt);
 		setLastSyncedAt(syncStartedAt);
 
@@ -456,6 +582,63 @@ export async function runSync(): Promise<SyncResult> {
 	}
 }
 
+// Push a single movie to Supabase immediately after a local mutation.
+// Used by Trigger 3 in useAutoSync instead of a full runSync().
+// If the row is soft-deleted, pushes the delete to Supabase and hard-deletes locally.
+export async function pushOneMovie(id: string): Promise<void> {
+	const supabase = getSupabase();
+	const {
+		data: { session: existingSession },
+	} = await supabase.auth.getSession();
+	if (!existingSession) await autoLogin();
+	const {
+		data: { session },
+	} = await supabase.auth.getSession();
+	if (!session) throw new Error("Not authenticated");
+
+	const db = await getDb();
+	const [row] = await db.select<LocalMovieRow[]>(
+		"SELECT * FROM movies WHERE id = $1",
+		[id],
+	);
+	if (!row) return; // already hard-deleted
+
+	if (row.deleted_at) {
+		// Soft-deleted locally — push the hard delete to Supabase, then clean up locally.
+		const { error } = await supabase.from("movies").delete().eq("id", id);
+		if (error) throw error;
+		await db.execute("DELETE FROM movies WHERE id = $1", [id]);
+	} else {
+		const posterUrl = row.poster_url?.startsWith("data:") ? null : row.poster_url;
+		const { error } = await supabase.from("movies").upsert(
+			{
+				id: row.id,
+				tmdb_id: row.tmdb_id,
+				title: row.title,
+				year: row.year,
+				poster_url: posterUrl,
+				tmdb_rating: row.tmdb_rating,
+				personal_rating: row.personal_rating,
+				status: row.status,
+				format: row.format,
+				is_physical: Boolean(row.is_physical),
+				is_digital: Boolean(row.is_digital),
+				is_backed_up: Boolean(row.is_backed_up),
+				notes: row.notes,
+				deleted_at: row.deleted_at,
+				created_at: row.created_at,
+				updated_at: row.updated_at,
+				type: row.type,
+				show_id: row.show_id,
+				season_number: row.season_number,
+				user_id: session.user.id,
+			},
+			{ onConflict: "id" },
+		);
+		if (error) throw error;
+	}
+}
+
 // Resolve a conflict detected during sync. The winner's version becomes
 // canonical — local version is pushed to Supabase, or remote version
 // is written into local SQLite.
@@ -471,10 +654,10 @@ export async function resolveConflict(
 		// Sync exception: app layer sets updated_at here — see sync.md for rationale.
 		// Use toISOString() (not datetime('now')) to keep the format consistent.
 		const bumpedAt = new Date().toISOString();
-		await db.execute(
-			"UPDATE movies SET updated_at = $1 WHERE id = $2",
-			[bumpedAt, conflict.id],
-		);
+		await db.execute("UPDATE movies SET updated_at = $1 WHERE id = $2", [
+			bumpedAt,
+			conflict.id,
+		]);
 		const [updatedRow] = await db.select<LocalMovieRow[]>(
 			"SELECT * FROM movies WHERE id = $1",
 			[conflict.id],

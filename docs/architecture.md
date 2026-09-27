@@ -14,9 +14,9 @@
 └──────────┬──────────────────────────┬───────────┘
            │                          │
 ┌──────────▼──────────┐   ┌──────────▼───────────┐
-│   SQLite (local)     │   │   PocketBase (sync)   │
-│   tauri-plugin-sql   │   │   pocketbase JS SDK   │
-│   src/lib/db.ts      │   │   src/lib/pocketbase.ts│
+│   SQLite (local)     │   │   Supabase (sync)     │
+│   tauri-plugin-sql   │   │   supabase-js SDK     │
+│   src/lib/db.ts      │   │   src/lib/supabase.ts │
 └─────────────────────┘   └───────────────────────┘
            │
 ┌──────────▼──────────┐   ┌───────────────────────┐
@@ -44,8 +44,8 @@ All business logic. No JSX. Divided by domain:
 | `movies` | `movies.store.ts` | Zustand — UI state, active filters, optimistic state |
 | `movies` | `movies.schema.ts` | Zod schemas for the `Movie` domain |
 | `movies` | `movies.types.ts` | TypeScript types (inferred from Zod where possible) |
-| `sync` | `sync.service.ts` | Push/pull logic between SQLite and PocketBase |
-| `sync` | `sync.store.ts` | Sync state — isSyncing, lastSyncedAt, errors |
+| `sync` | `sync.service.ts` | Push/pull logic between SQLite and Supabase; `resolveConflict()` |
+| `sync` | `sync.store.ts` | Sync state — isSyncing, lastSyncedAt, errors, conflicts, syncTriggerAt |
 | `tmdb` | `tmdb.service.ts` | TMDB REST API calls |
 | `tmdb` | `tmdb.queries.ts` | TanStack Query hooks for TMDB search/details |
 | `tmdb` | `tmdb.schema.ts` | Zod schemas for TMDB API responses |
@@ -53,7 +53,8 @@ All business logic. No JSX. Divided by domain:
 ### `src/lib/`
 React-free singletons and utilities:
 - `db.ts` — typed wrapper around `@tauri-apps/plugin-sql`
-- `pocketbase.ts` — configured PocketBase client
+- `supabase.ts` — typed Supabase client singleton (`createClient<Database>()`)
+- `database.types.ts` — generated Supabase schema types
 - `cn.ts` — Tailwind class merging utility
 
 ### `src-tauri/src/`
@@ -112,33 +113,55 @@ Rust command to download via reqwest (no CORS) and save locally.
 **Custom posters** (file picker) are stored as JPEG data URLs (base64-embedded)
 because Tauri's asset protocol cannot serve runtime-written files on Android.
 
+## Data Flow: Auto-Sync Triggers
+
+Auto-sync fires from three places — all call the same `runSync()` under the hood:
+
+1. **On mount** (`useAutoSync` in `CollectionView`) — fires once if last sync > 5 min ago or never.
+2. **On window focus** (`useAutoSync`) — fires if stale when app is foregrounded.
+3. **After any movie mutation** (`movies.queries.ts`) — `requestSync()` sets a Zustand flag; `useAutoSync` debounces 1500 ms then calls `runSync()`. Rapid edits batch into a single sync.
+
+The manual "Sync Now" button in SyncView also calls `runSync()` directly.
+
 ## Data Flow: Sync
 
 ```
-Manual sync button pressed
+runSync() called (auto or manual)
         ↓
-Check for pending soft deletes (deleted_at IS NOT NULL)
-        ↓ (if any)
-DeleteConfirmationView shown — user selects which to confirm
+PUSH DELETES: any soft-deleted rows → Supabase hard delete, SQLite hard delete
         ↓
-sync.service.runSync(skipDeleteConfirmation: false)
-  ├── PUSH: ALL local rows checked against PocketBase — push if missing from remote OR updated_at > last_synced_at
-  │     poster_url stripped to null before push if it is a base64 data URL (custom posters are local-only)
-  ├── PUSH DELETES: confirmed soft deletes → PocketBase delete, then hard local delete
-  └── PULL: PocketBase records where updated_at > last_synced_at → SQLite upsert
-        poster_url uses COALESCE so a null remote value never overwrites a local custom poster
+Fetch remote meta: SELECT id, updated_at FROM movies (all remote rows)
         ↓
-Update sync_meta.last_synced_at
+LOCAL DEDUP: detect (tmdb_id, type, season_number) groups with > 1 local row
+  → soft-delete strays (queued for push-delete above on next sync)
         ↓
-invalidateQueries(['movies'])
+PUSH: for each local active row where:
+  - !isInRemote → push (new record)
+  - isInRemote AND updated_at > last_synced_at AND remote.updated_at > last_synced_at → CONFLICT (hold back)
+  - isInRemote AND updated_at > last_synced_at AND remote.updated_at <= last_synced_at → push (local wins)
+  - isInRemote AND updated_at <= last_synced_at → skip (no change)
+  - !lastSyncedAt AND isInRemote → skip (first sync — pull wins for existing rows)
+  poster_url stripped to null before push if base64 data URL (custom posters are local-only)
+        ↓
+PULL: Supabase records where deleted_at IS NULL AND updated_at >= last_synced_at
+  → skip pushed/conflicted IDs
+  → dedup check: if a local row with different ID matches same TMDB content → delete remote stray
+  → poster cache: TMDB HTTPS URLs fetched via Rust before INSERT OR REPLACE
+  → COALESCE(poster_url): null remote never overwrites local custom poster
+        ↓
+CONFLICTS: held-back rows stored in useSyncStore.conflicts[]
+  → shown in SyncView as ConflictCard (side-by-side diff)
+  → user picks "Keep Local" (bump updated_at + push) or "Keep Remote" (INSERT OR REPLACE locally)
+        ↓
+Update sync_meta.last_synced_at → setConflicts(result.conflicts) → invalidateQueries(['movies'])
 ```
 
 ## Local-First Principles
 
-1. **All reads come from SQLite.** PocketBase is never queried for display data, only for sync.
-2. **The app works with no network.** Offline changes accumulate and sync when connected to the home network.
-3. **Soft deletes for safety.** A delete while offline queues the row with `deleted_at` set. The user confirms pending deletes before they propagate to PocketBase.
-4. **Last-write-wins conflict resolution.** The row with the newer `updated_at` wins during a merge. This is acceptable for a personal app with one user.
+1. **All reads come from SQLite.** Supabase is never queried for display data, only for sync.
+2. **The app works with no network.** Offline changes accumulate; auto-sync catches up on next trigger.
+3. **Soft deletes sync automatically.** Deleted rows are pushed to Supabase without confirmation (single-user app).
+4. **Last-write-wins + conflict detection.** The row with the newer `updated_at` wins. If both sides changed since last sync, the conflict is surfaced for user resolution rather than silently overwritten.
 
 ## Tauri 2 Capabilities
 

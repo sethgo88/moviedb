@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSyncStore } from "../sync/sync.store";
 import {
 	createMovie,
 	getAllMovies,
@@ -35,6 +36,7 @@ export function useCreateMovie() {
 		mutationFn: (data: NewMovie) => createMovie(data),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: movieKeys.all });
+			useSyncStore.getState().requestSync();
 		},
 	});
 }
@@ -47,6 +49,7 @@ export function useUpdateMovie() {
 		onSuccess: (_result, { id }) => {
 			queryClient.invalidateQueries({ queryKey: movieKeys.all });
 			queryClient.invalidateQueries({ queryKey: movieKeys.detail(id) });
+			useSyncStore.getState().requestSync();
 		},
 	});
 }
@@ -57,6 +60,7 @@ export function useSoftDeleteMovie() {
 		mutationFn: (id: string) => softDeleteMovie(id),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: movieKeys.all });
+			useSyncStore.getState().requestSync();
 		},
 	});
 }

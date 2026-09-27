@@ -21,4 +21,6 @@ export type SortOption =
 	| "year_desc"
 	| "year_asc"
 	| "rating_desc"
-	| "tmdb_rating_desc";
+	| "tmdb_rating_desc"
+	| "created_desc"
+	| "created_asc";

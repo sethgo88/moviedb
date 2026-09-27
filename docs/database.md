@@ -4,9 +4,9 @@
 
 The app uses two databases:
 - **SQLite** (local, always available) — primary data store
-- **PocketBase** (self-hosted, home network) — sync mirror
+- **Supabase** (hosted Postgres) — sync mirror
 
-All reads come from SQLite. PocketBase is only touched during sync.
+All reads come from SQLite. Supabase is only touched during sync.
 
 ---
 
@@ -129,22 +129,28 @@ let migrations = vec![
 
 ---
 
-## PocketBase Collection Schema
+## Supabase Table Schema
 
-PocketBase uses collections (analogous to tables). The `movies` collection mirrors the SQLite schema with these differences:
+The Supabase `movies` table mirrors the SQLite schema. Key differences between SQLite and Postgres:
 
-| SQLite | PocketBase |
+| SQLite | Supabase (Postgres) |
 |---|---|
-| `TEXT` UUID primary key | PocketBase generates its own `id` (15-char string) — store local UUID in a separate `local_id` field |
-| `INTEGER` (0/1) for booleans | `Bool` field type |
-| `TEXT` (ISO 8601) for timestamps | `Date` field type |
-| `REAL` for ratings | `Number` field type |
+| `TEXT` UUID primary key | `uuid` primary key — same UUID value used directly, no mapping layer |
+| `INTEGER` (0/1) for booleans | `boolean` (`true`/`false`) — convert on push (`Boolean(n)`) and pull (`boolInt(b)`) |
+| `TEXT` (ISO 8601) for timestamps | `timestamptz` — stored and returned as ISO 8601 strings |
+| `REAL` for ratings | `numeric` / `float8` |
 
-### Sync ID mapping
-Because PocketBase generates its own IDs, each record stores the local SQLite UUID in a `local_id` text field. Sync uses `local_id` to match remote records to local rows.
+### ID mapping
+The SQLite UUID is used directly as the Supabase `id`. No `local_id` indirection. Upsert uses `onConflict: 'id'`.
 
-### Auth
-PocketBase supports simple username/password auth. Store the server URL and auth token in Tauri's secure store — never hardcode them.
+### Auth and RLS
+Supabase uses email/password auth (or OAuth). The session is stored automatically in `localStorage` by the Supabase JS client. Each row includes a `user_id` column (set to `session.user.id` on push) and Row Level Security (RLS) policies restrict reads/writes to the owning user.
+
+### Generated types
+`src/lib/database.types.ts` is the Supabase-generated TypeScript schema (`Database`, `Tables<"movies">`, etc.). The Supabase client is typed: `createClient<Database>()`. Regenerate with:
+```bash
+npx supabase gen types typescript --project-id <project-id> > src/lib/database.types.ts
+```
 
 ---
 
@@ -153,34 +159,33 @@ PocketBase supports simple username/password auth. Store the server URL and auth
 ### Algorithm: last-write-wins via `updated_at`
 
 1. Read `last_synced_at` from `sync_meta`
-2. **PUSH:** Find local rows where `updated_at > last_synced_at AND deleted_at IS NULL` → upsert to PocketBase (match on `local_id`)
-3. **PUSH DELETES:** Hard delete confirmed soft-deleted rows from PocketBase, then locally
-4. **PULL:** Fetch PocketBase records where `updated_at > last_synced_at` → upsert to local SQLite (match on `local_id`)
-5. Update `sync_meta.last_synced_at` to now
+2. **LOCAL DEDUP:** Find local rows that share the same `(tmdb_id, type, season_number)` — keep the most-recently-updated, soft-delete the rest. Prevents a push-every-other-sync loop caused by duplicate UUIDs for the same content.
+3. **PUSH DELETES:** Hard delete confirmed soft-deleted rows from Supabase, then locally.
+4. **PUSH:** All local active rows checked against Supabase — push (upsert on `id`) if missing from remote OR `updated_at > last_synced_at`. Custom poster data URLs are stripped to `null` before push (local-only). `updated_at` is explicitly carried from SQLite to preserve last-write-wins semantics across devices (documented exception to the "trigger maintains updated_at" rule).
+5. **PULL:** Fetch Supabase records where `updated_at ≥ last_synced_at` and `deleted_at IS NULL` → upsert to local SQLite. `poster_url` uses `COALESCE` so a null remote value never overwrites a local custom poster.
+6. Update `sync_meta.last_synced_at` to now.
 
 **First sync** (when `last_synced_at IS NULL`): push all local rows, pull all remote records.
 
 ### Conflict resolution
 
-The row with the newer `updated_at` wins. For a single-user personal app this is acceptable. The trigger guarantees `updated_at` is always the true last-modified time.
+The row with the newer `updated_at` wins. For a single-user personal app this is acceptable.
 
 ### Soft delete flow
 
 ```
 User deletes movie
         ↓
-isOnline?
-   YES → hard delete locally → sync immediately → delete from PocketBase
-   NO  → set deleted_at = now → row hidden from UI → queued for sync
+set deleted_at = now → row hidden from UI → queued for sync
         ↓ (next manual sync)
 Pending soft deletes exist?
-   YES → show DeleteConfirmationView (user selects which to confirm)
-       → confirmed: hard delete locally + propagate to PocketBase
+   YES → show confirmation (user confirms before propagating)
+       → confirmed: delete from Supabase + hard-delete locally
        → skipped: leave soft delete in place
    NO  → run sync normally
 ```
 
-**Post-auth sync** (after magic link login) always skips the delete confirmation screen — it just pushes/pulls data. `runSync(skipDeleteConfirmation: true)`.
+`runSync(skipDeleteConfirmation: true)` bypasses the confirmation (used for programmatic sync).
 
 ---
 

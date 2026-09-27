@@ -57,7 +57,7 @@ export async function fetchAndCachePoster(
 }
 
 /**
- * Cache a poster from a full TMDB URL (e.g. as stored after a PocketBase pull).
+ * Cache a poster from a full TMDB URL (e.g. as stored after a Supabase pull).
  * Checks local cache first; downloads via Rust reqwest only if not cached.
  */
 export async function cachePosterFromUrl(
@@ -87,7 +87,7 @@ async function fetchTmdbPosterPath(tmdbId: number): Promise<string | null> {
  *   1. poster_url is a TMDB URL (e.g. after a sync pull) — cache directly.
  *   2. poster_url is null — fetch movie details from TMDB to get poster_path,
  *      then cache. This covers movies whose data URLs were stripped to null
- *      before pushing to PocketBase.
+ *      before pushing to Supabase.
  * Returns the count of successfully cached posters.
  */
 export async function refreshUncachedPosters(): Promise<number> {

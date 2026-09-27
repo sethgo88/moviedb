@@ -85,18 +85,135 @@ fn get_poster_cache_size(app: tauri::AppHandle) -> Result<i64, String> {
     Ok(total as i64)
 }
 
-/// Write a text file to the device Downloads directory.
+/// Desktop: write directly to the OS Downloads folder.
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn write_to_downloads(
     app: tauri::AppHandle,
     filename: String,
     content: String,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let download_dir = app.path().download_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&download_dir).map_err(|e| e.to_string())?;
     let path = download_dir.join(&filename);
     std::fs::write(&path, content.as_bytes()).map_err(|e| e.to_string())?;
-    Ok(())
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// Android 10+: direct external-storage writes are blocked by scoped storage.
+/// Use the MediaStore ContentProvider to insert into the public Downloads folder.
+#[cfg(target_os = "android")]
+#[tauri::command]
+async fn write_to_downloads(filename: String, content: String) -> Result<String, String> {
+    use jni::{
+        objects::{JObject, JString, JValue},
+        JavaVM,
+    };
+
+    let mime_type = if filename.ends_with(".json") {
+        "application/json"
+    } else if filename.ends_with(".csv") {
+        "text/csv"
+    } else {
+        "application/octet-stream"
+    };
+
+    let ctx = ndk_context::android_context();
+    let vm = unsafe { JavaVM::from_raw(ctx.vm().cast()) }.map_err(|e| e.to_string())?;
+    let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
+    let activity = unsafe { JObject::from_raw(ctx.context().cast()) };
+
+    // ContentResolver
+    let resolver = env
+        .call_method(
+            &activity,
+            "getContentResolver",
+            "()Landroid/content/ContentResolver;",
+            &[],
+        )
+        .map_err(|e| e.to_string())?
+        .l()
+        .map_err(|e| e.to_string())?;
+
+    // ContentValues with display name, MIME type and target sub-folder
+    let cv_class = env
+        .find_class("android/content/ContentValues")
+        .map_err(|e| e.to_string())?;
+    let cv = env
+        .new_object(&cv_class, "()V", &[])
+        .map_err(|e| e.to_string())?;
+
+    let put_ss = "(Ljava/lang/String;Ljava/lang/String;)V";
+    for (k, v) in [
+        ("_display_name", filename.as_str()),
+        ("mime_type", mime_type),
+        ("relative_path", "Download/"),
+    ] {
+        let jk = env.new_string(k).map_err(|e| e.to_string())?;
+        let jv = env.new_string(v).map_err(|e| e.to_string())?;
+        env.call_method(&cv, "put", put_ss, &[JValue::Object(&jk), JValue::Object(&jv)])
+            .map_err(|e| e.to_string())?;
+    }
+
+    // MediaStore.Downloads.EXTERNAL_CONTENT_URI
+    let ms_class = env
+        .find_class("android/provider/MediaStore$Downloads")
+        .map_err(|e| e.to_string())?;
+    let ext_uri = env
+        .get_static_field(&ms_class, "EXTERNAL_CONTENT_URI", "Landroid/net/Uri;")
+        .map_err(|e| e.to_string())?
+        .l()
+        .map_err(|e| e.to_string())?;
+
+    // Insert row → receive content URI
+    let uri = env
+        .call_method(
+            &resolver,
+            "insert",
+            "(Landroid/net/Uri;Landroid/content/ContentValues;)Landroid/net/Uri;",
+            &[JValue::Object(&ext_uri), JValue::Object(&cv)],
+        )
+        .map_err(|e| e.to_string())?
+        .l()
+        .map_err(|e| e.to_string())?;
+
+    if uri.is_null() {
+        return Err("MediaStore insert returned null URI".to_string());
+    }
+
+    // Open OutputStream and write bytes
+    let out_stream = env
+        .call_method(
+            &resolver,
+            "openOutputStream",
+            "(Landroid/net/Uri;)Ljava/io/OutputStream;",
+            &[JValue::Object(&uri)],
+        )
+        .map_err(|e| e.to_string())?
+        .l()
+        .map_err(|e| e.to_string())?;
+
+    let byte_array = env
+        .byte_array_from_slice(content.as_bytes())
+        .map_err(|e| e.to_string())?;
+    let byte_obj = unsafe { JObject::from_raw(byte_array.as_raw()) };
+    env.call_method(&out_stream, "write", "([B)V", &[JValue::Object(&byte_obj)])
+        .map_err(|e| e.to_string())?;
+    env.call_method(&out_stream, "close", "()V", &[])
+        .map_err(|e| e.to_string())?;
+
+    // Return the URI string so the toast shows the file location
+    let uri_jstr = env
+        .call_method(&uri, "toString", "()Ljava/lang/String;", &[])
+        .map_err(|e| e.to_string())?
+        .l()
+        .map_err(|e| e.to_string())?;
+    let result: String = env
+        .get_string(&JString::from(uri_jstr))
+        .map_err(|e| e.to_string())?
+        .into();
+
+    Ok(result)
 }
 
 /// Resize a picked image (already encoded as JPEG on the JS side) and

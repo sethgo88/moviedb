@@ -24,7 +24,7 @@ Small, safe improvements to the existing codebase.
 | Genre & director fields | TMDB already returns these — store and surface them in the schema, form, and filter panel | Low |
 | Watch history / log | Add `watched_at` date or separate `watch_log` table. Track last-watched, watch count, rewatch flag | Medium |
 | Statistics view | Totals, format breakdown, by decade, average rating, top genres, total runtime — all from SQLite | Medium |
-| Import / export | CSV or JSON export of full collection. Backup independent of PocketBase. Letterboxd/IMDb import | Medium |
+| Import / export | CSV or JSON export of full collection. Backup independent of Supabase. Letterboxd/IMDb import | Medium |
 
 ### Medium priority
 
@@ -41,7 +41,7 @@ Small, safe improvements to the existing codebase.
 | Feature | Description | Complexity |
 |---|---|---|
 | Lists / collections | Named lists beyond OWNED/WANTED (e.g. Favourites, Watchlist, Lent out) | Medium |
-| Friends / sharing | Read-only shareable "want list" via a PocketBase public view URL | Medium |
+| Friends / sharing | Read-only shareable "want list" via a Supabase public view or shared link | Medium |
 | Movie recommendations | TMDB "similar movies" endpoint — "if you own X, you might like Y" | Low |
 | Cloud backup | Export SQLite DB to Google Drive / device cloud storage | Medium |
 | Collection value estimator | Price lookup for physical media (eBay/Discogs) | High |

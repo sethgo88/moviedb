@@ -1,6 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { Disc3, Film, Star, Trash2, TvMinimalPlay } from "lucide-react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useSoftDeleteMovie } from "../../../features/movies/movies.queries";
 import type { Movie } from "../../../features/movies/movies.types";
 import { Badge } from "../../atoms/Badge/badge";
@@ -10,98 +10,30 @@ interface MovieCardProps {
 	movie: Movie;
 }
 
-const SWIPE_THRESHOLD = 72; // px to trigger delete reveal
-const DELETE_ZONE_WIDTH = 80; // px width of red delete zone
-
 export function MovieCard({ movie }: MovieCardProps) {
 	const navigate = useNavigate();
 	const { mutate: softDelete } = useSoftDeleteMovie();
-	const [offset, setOffset] = useState(0);
 	const [showConfirm, setShowConfirm] = useState(false);
-	const startX = useRef(0);
-	const swiping = useRef(false);
-	const didSwipe = useRef(false);
 
 	const statusClassName =
 		movie.status === "OWNED"
 			? "bg-green-600/20 text-green-400"
 			: "bg-yellow-600/20 text-yellow-400";
 
-	function onTouchStart(e: React.TouchEvent) {
-		startX.current = e.touches[0]?.clientX ?? 0;
-		swiping.current = true;
-		didSwipe.current = false;
-	}
-
-	function onTouchMove(e: React.TouchEvent) {
-		if (!swiping.current) return;
-		const dx = startX.current - (e.touches[0]?.clientX ?? 0);
-		if (dx < 0) {
-			// Swiping right — close if open
-			setOffset(0);
-			return;
-		}
-		const clamped = Math.min(dx, DELETE_ZONE_WIDTH);
-		setOffset(clamped);
-		if (clamped > 4) didSwipe.current = true;
-	}
-
-	function onTouchEnd() {
-		swiping.current = false;
-		if (offset >= SWIPE_THRESHOLD) {
-			setOffset(DELETE_ZONE_WIDTH);
-		} else {
-			setOffset(0);
-		}
-	}
-
-	function handleCardClick() {
-		if (didSwipe.current) {
-			didSwipe.current = false;
-			return;
-		}
-		if (offset > 0) {
-			setOffset(0);
-			return;
-		}
-		navigate({ to: "/movie/$id/edit", params: { id: movie.id } });
-	}
-
 	function handleDelete() {
 		softDelete(movie.id);
 		setShowConfirm(false);
-		setOffset(0);
 	}
 
 	return (
 		<div className="relative overflow-hidden rounded-xl">
-			{/* Delete zone (revealed on swipe) */}
-			<div
-				className="absolute inset-y-0 right-0 flex items-center justify-center bg-red-600"
-				style={{ width: DELETE_ZONE_WIDTH }}
-			>
-				<button
-					type="button"
-					aria-label="Delete movie"
-					className="flex h-full w-full items-center justify-center"
-					onClick={() => setShowConfirm(true)}
-				>
-					<Trash2 size={22} className="text-white" />
-				</button>
-			</div>
-
-			{/* Card (slides left to reveal delete zone) */}
+			{/* Card — navigates to edit */}
 			<button
 				type="button"
 				className="relative flex min-h-60 w-full overflow-hidden bg-gray-800 p-3 text-left transition-opacity active:opacity-80"
-				style={{
-					transform: `translateX(-${offset}px)`,
-					transition: swiping.current ? "none" : "transform 0.2s ease",
-				}}
-				onTouchStart={onTouchStart}
-				onTouchMove={onTouchMove}
-				onTouchEnd={onTouchEnd}
-				onClick={handleCardClick}
+				onClick={() =>
+					navigate({ to: "/movie/$id/edit", params: { id: movie.id } })
+				}
 			>
 				{/* Poster background */}
 				{movie.poster_url ? (
@@ -170,6 +102,16 @@ export function MovieCard({ movie }: MovieCardProps) {
 				</div>
 			</button>
 
+			{/* Trash button — sibling of card button, not a child */}
+			<button
+				type="button"
+				aria-label="Delete movie"
+				className="absolute bottom-2 right-2 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md bg-black/40 text-white/70 active:text-white"
+				onClick={() => setShowConfirm(true)}
+			>
+				<Trash2 size={16} />
+			</button>
+
 			<ConfirmSheet
 				isOpen={showConfirm}
 				title="Delete Movie"
@@ -177,10 +119,7 @@ export function MovieCard({ movie }: MovieCardProps) {
 				confirmLabel="Delete"
 				isDangerous
 				onConfirm={handleDelete}
-				onCancel={() => {
-					setShowConfirm(false);
-					setOffset(0);
-				}}
+				onCancel={() => setShowConfirm(false)}
 			/>
 		</div>
 	);

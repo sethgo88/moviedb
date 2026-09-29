@@ -5,8 +5,8 @@ import type { Database } from "./database.types";
 // ─── Hardcoded credentials (single-user app) ────────────────────────────────
 // URLs and anon key are safe to commit — RLS enforces row-level security.
 // Password lives in .env.local (gitignored via *.local in .gitignore).
-const LOCAL_URL_DEFAULT = "http://192.168.0.172:8000";
-const TAILSCALE_URL_DEFAULT = "http://100.85.209.13:8000";
+const LOCAL_URL_DEFAULT = "http://192.168.0.172:8100";
+const TAILSCALE_URL_DEFAULT = "http://100.85.209.13:8100";
 const SUPABASE_ANON_KEY =
 	"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkwMDQ3NTIzLCJleHAiOjI1MjQ2MDgwMDB9.QLwx0Z4dttScDehBGtYAqlFMDEe2NjiQJCjG5bIsFmI";
 const SUPABASE_EMAIL = "seth.oharra@gmail.com";
@@ -21,8 +21,29 @@ const SUPABASE_PASSWORD: string = (() => {
 const LOCAL_URL_KEY = "supabase_local_url";
 const TAILSCALE_URL_KEY = "supabase_tailscale_url";
 
-// Single cast alias so the pattern doesn't repeat.
-const httpFetch = tauriFetch as unknown as typeof globalThis.fetch;
+// Wrap tauriFetch so non-JSON error responses (e.g. Kong returning plain-text
+// "Unauthorized" on a bad API key) are converted to JSON before the Supabase
+// JS client tries to parse them. Without this, tauriFetch throws a
+// ReadableStreamDefaultController error that masks the real failure.
+const httpFetch: typeof globalThis.fetch = async (input, init) => {
+	const response = await (tauriFetch as unknown as typeof globalThis.fetch)(
+		input,
+		init,
+	);
+	if (!response.ok) {
+		const ct = response.headers.get("content-type") ?? "";
+		if (!ct.includes("application/json")) {
+			const text = await response.text().catch(() => "Unknown error");
+			console.warn("[supabase] non-JSON error response:", response.status, text);
+			return new Response(JSON.stringify({ message: text, error: text }), {
+				status: response.status,
+				statusText: response.statusText,
+				headers: { "content-type": "application/json" },
+			});
+		}
+	}
+	return response;
+};
 
 type SupabaseClient = ReturnType<typeof createClient<Database>>;
 
@@ -105,6 +126,9 @@ async function resolveSupabaseUrl(): Promise<string> {
 
 /** Discard the cached client so the next getSupabase() call re-probes URLs. */
 export function resetSupabase(): void {
+	// Stop the GoTrueClient's background refresh timer before discarding so
+	// it doesn't keep firing 401s from backgrounded sessions.
+	supabaseInstance?.auth.stopAutoRefresh();
 	supabaseInstance = null;
 	resolvePromise = null;
 }
@@ -137,11 +161,22 @@ export async function getSupabase(): Promise<SupabaseClient> {
 
 /** Sign in using hardcoded credentials. Throws on failure. */
 export async function autoLogin(): Promise<void> {
-	const { error } = await (await getSupabase()).auth.signInWithPassword({
-		email: SUPABASE_EMAIL,
-		password: SUPABASE_PASSWORD,
-	});
-	if (error) throw error;
+	console.log("[auth] autoLogin — calling signInWithPassword");
+	try {
+		const { data, error } = await (await getSupabase()).auth.signInWithPassword({
+			email: SUPABASE_EMAIL,
+			password: SUPABASE_PASSWORD,
+		});
+		console.log("[auth] signInWithPassword result:", {
+			hasSession: !!data?.session,
+			errorMsg: error?.message,
+			errorCode: (error as { code?: string } | null)?.code,
+		});
+		if (error) throw error;
+	} catch (e) {
+		console.error("[auth] autoLogin threw:", e instanceof Error ? e.message : String(e));
+		throw e;
+	}
 }
 
 /** Authenticate with email + password. Throws on failure. */

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod";
 import { getDb } from "../../lib/db";
+import { TMDB_POSTER_BASE } from "../tmdb/tmdb.service";
 import {
 	MovieSchema,
 	NewMovieSchema,
@@ -35,12 +36,12 @@ export async function createMovie(data: NewMovie): Promise<Movie> {
       id, tmdb_id, title, year, poster_url, tmdb_rating, personal_rating,
       status, format, is_physical, is_digital, is_backed_up, notes,
       deleted_at, created_at, updated_at,
-      type, show_id, season_number
+      type, show_id, season_number, tmdb_poster_path
     ) VALUES (
       $1, $2, $3, $4, $5, $6, $7,
       $8, $9, $10, $11, $12, $13,
       NULL, $14, $14,
-      $15, $16, $17
+      $15, $16, $17, $18
     )`,
 		[
 			id,
@@ -60,6 +61,7 @@ export async function createMovie(data: NewMovie): Promise<Movie> {
 			validated.type,
 			validated.show_id ?? null,
 			validated.season_number ?? null,
+			validated.tmdb_poster_path ?? null,
 		],
 	);
 
@@ -183,6 +185,94 @@ export async function checkTitleYearSimilar(
 		[title, year],
 	);
 	return (rows[0]?.count ?? 0) > 0;
+}
+
+type PublicMovieRow = {
+	id: string;
+	title: string;
+	year: number | null;
+	tmdb_id: number | null;
+	tmdb_rating: number | null;
+	tmdb_poster_path: string | null;
+	status: string;
+	format: string;
+	is_physical: number;
+	is_digital: number;
+	type: string;
+	season_number: number | null;
+	// show_id included so the public site can group TV seasons by show
+	show_id: string | null;
+};
+
+type PublicMovieOut = Omit<PublicMovieRow, "is_physical" | "is_digital"> & {
+	is_physical: boolean;
+	is_digital: boolean;
+	poster_url: string | null;
+};
+
+function toBase64(str: string): string {
+	const bytes = new TextEncoder().encode(str);
+	let binary = "";
+	for (const byte of bytes) {
+		binary += String.fromCharCode(byte);
+	}
+	return btoa(binary);
+}
+
+export async function publishToWeb(): Promise<void> {
+	const pat = import.meta.env.VITE_GITHUB_PAT || undefined;
+	if (!pat) throw new Error("VITE_GITHUB_PAT is not set");
+
+	const db = await getDb();
+	const rows = await db.select<PublicMovieRow[]>(
+		`SELECT id, title, year, tmdb_id, tmdb_rating, tmdb_poster_path,
+		 status, format, is_physical, is_digital, type, season_number, show_id
+		 FROM movies WHERE deleted_at IS NULL ORDER BY title`,
+	);
+
+	const movies: PublicMovieOut[] = rows.map((r) => ({
+		...r,
+		is_physical: r.is_physical === 1,
+		is_digital: r.is_digital === 1,
+		poster_url: r.tmdb_poster_path
+			? `${TMDB_POSTER_BASE}${r.tmdb_poster_path}`
+			: null,
+	}));
+
+	const content = JSON.stringify(movies, null, 2);
+	const apiUrl =
+		"https://api.github.com/repos/sethgo88/moviedb-view/contents/public/movies.json";
+	const headers = {
+		Authorization: `Bearer ${pat}`,
+		Accept: "application/vnd.github+json",
+		"X-GitHub-Api-Version": "2022-11-28",
+	};
+
+	const getRes = await fetch(apiUrl, { headers });
+	let sha: string | undefined;
+	if (getRes.ok) {
+		const data = (await getRes.json()) as { sha: string; [key: string]: unknown };
+		sha = data.sha;
+	} else if (getRes.status !== 404) {
+		const errText = await getRes.text();
+		throw new Error(`GitHub API error fetching SHA (${getRes.status}): ${errText}`);
+	}
+	// 404 means the file doesn't exist yet; proceed with a create (no sha needed)
+
+	const putRes = await fetch(apiUrl, {
+		method: "PUT",
+		headers: { ...headers, "Content-Type": "application/json" },
+		body: JSON.stringify({
+			message: "chore: update public movies.json",
+			content: toBase64(content),
+			...(sha ? { sha } : {}),
+		}),
+	});
+
+	if (!putRes.ok) {
+		const err = await putRes.text();
+		throw new Error(`GitHub API error ${putRes.status}: ${err}`);
+	}
 }
 
 export async function exportCollectionAsJson(): Promise<string> {

@@ -336,6 +336,30 @@ pub fn run() {
             ",
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 4,
+            description: "fix_sync_meta_primary_key",
+            sql: "
+                CREATE TABLE sync_meta_new (
+                    id             INTEGER PRIMARY KEY,
+                    last_synced_at TEXT
+                );
+
+                INSERT INTO sync_meta_new (id, last_synced_at)
+                SELECT 1, MAX(last_synced_at) FROM sync_meta;
+
+                DROP TABLE sync_meta;
+
+                ALTER TABLE sync_meta_new RENAME TO sync_meta;
+            ",
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 5,
+            description: "add_tmdb_poster_path",
+            sql: "ALTER TABLE movies ADD COLUMN tmdb_poster_path TEXT;",
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

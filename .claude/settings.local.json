@@ -10,7 +10,12 @@
       "Read(//c/web/moviedb/src/lib//**)",
       "Read(//c/web/moviedb/src//**)",
       "Bash(xargs grep:*)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git branch:*)",
+      "Bash(git remote:*)"
     ]
   },
   "hooks": {
@@ -20,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "FILE=$(jq -r '.tool_input.file_path // empty'); if [[ \"$FILE\" == *.ts || \"$FILE\" == *.tsx ]]; then pnpm biome check --write \"$FILE\"; fi"
+            "command": "eval \"$(fnm env)\" 2>/dev/null; FILE=$(jq -r '.tool_input.file_path // empty'); if [[ \"$FILE\" == *.ts || \"$FILE\" == *.tsx ]]; then cd /c/web/moviedb && pnpm biome check --write \"$FILE\"; fi"
           }
         ]
       }
@@ -30,7 +35,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "pnpm typecheck || exit 2"
+            "command": "eval \"$(fnm env)\" 2>/dev/null; cd /c/web/moviedb && pnpm typecheck || exit 2"
           }
         ]
       }

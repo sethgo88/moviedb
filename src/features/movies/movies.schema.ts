@@ -31,6 +31,7 @@ export const MovieSchema = z.object({
 	type: MovieTypeSchema,
 	show_id: z.string().uuid().nullable(),
 	season_number: z.number().int().nullable(),
+	tmdb_poster_path: z.string().nullable(),
 });
 
 export const NewMovieSchema = MovieSchema.omit({
@@ -41,6 +42,7 @@ export const NewMovieSchema = MovieSchema.omit({
 }).extend({
 	personal_rating: z.number().min(1).max(10).nullable().optional(),
 	notes: z.string().nullable().optional(),
+	tmdb_poster_path: z.string().nullable().optional(),
 });
 
 export const UpdateMovieSchema = NewMovieSchema.partial();

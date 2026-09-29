@@ -354,6 +354,12 @@ pub fn run() {
             ",
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 5,
+            description: "add_tmdb_poster_path",
+            sql: "ALTER TABLE movies ADD COLUMN tmdb_poster_path TEXT;",
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

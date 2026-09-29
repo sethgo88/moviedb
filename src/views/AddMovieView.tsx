@@ -60,6 +60,7 @@ interface AddFormValues {
 	poster_url: string | null;
 	tmdb_id: number | null;
 	tmdb_rating: number | null;
+	tmdb_poster_path: string | null;
 }
 
 const DEFAULTS: AddFormValues = {
@@ -74,6 +75,7 @@ const DEFAULTS: AddFormValues = {
 	poster_url: null,
 	tmdb_id: null,
 	tmdb_rating: null,
+	tmdb_poster_path: null,
 };
 
 export function AddMovieView() {
@@ -129,6 +131,7 @@ export function AddMovieView() {
 					type: "MOVIE",
 					show_id: null,
 					season_number: null,
+					tmdb_poster_path: value.tmdb_poster_path,
 				});
 				await createMovie(payload);
 			} else {
@@ -163,6 +166,7 @@ export function AddMovieView() {
 							type: "TV_SHOW",
 							show_id: null,
 							season_number: null,
+							tmdb_poster_path: value.tmdb_poster_path,
 						}),
 					);
 					showId = showRow.id;
@@ -184,6 +188,7 @@ export function AddMovieView() {
 					type: "TV_SEASON",
 					show_id: showId,
 					season_number: n,
+					tmdb_poster_path: value.tmdb_poster_path,
 				});
 				await createMovie(seasonPayload);
 			}
@@ -249,6 +254,7 @@ export function AddMovieView() {
 			result.vote_average > 0 ? result.vote_average : null,
 		);
 		if (posterUrl) form.setFieldValue("poster_url", posterUrl);
+		form.setFieldValue("tmdb_poster_path", result.poster_path ?? null);
 		setTitleQuery("");
 		setIsTitleFocused(false);
 		setIsSimilar(false);
@@ -279,6 +285,7 @@ export function AddMovieView() {
 			result.vote_average > 0 ? result.vote_average : null,
 		);
 		if (posterUrl) form.setFieldValue("poster_url", posterUrl);
+		form.setFieldValue("tmdb_poster_path", result.poster_path ?? null);
 		setTitleQuery("");
 		setIsTitleFocused(false);
 		// Duplicate check deferred until season number is entered
@@ -299,6 +306,7 @@ export function AddMovieView() {
 					details.poster_path,
 				);
 				form.setFieldValue("poster_url", posterUrl);
+				form.setFieldValue("tmdb_poster_path", details.poster_path);
 			}
 		} catch {
 			// leave poster as show-level poster

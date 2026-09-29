@@ -31,8 +31,8 @@ const TYPE_CHIPS = [
 ];
 
 const STATUS_CHIPS: { label: string; value: MovieStatus }[] = [
-	{ label: "Owned", value: "OWNED" },
-	{ label: "Wanted", value: "WANTED" },
+	{ label: "Own", value: "OWNED" },
+	{ label: "Want", value: "WANTED" },
 ];
 
 const FORMAT_CHIPS: { label: string; value: MovieFormat }[] = [

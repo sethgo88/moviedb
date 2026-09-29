@@ -59,12 +59,13 @@ React-free singletons and utilities:
 
 ### `src-tauri/src/`
 Rust backend. Currently handles:
-- SQLite plugin registration and migrations (v1: initial schema, v2: personal_rating REAL)
-- `save_custom_poster` — receives a base64 JPEG data URL from JS; currently unused (custom posters are stored as data URLs directly in `poster_url`)
+- SQLite plugin registration and migrations (v1–v5 — see [database.md](database.md))
+- `save_custom_poster` — receives a base64 JPEG from JS; stores in poster-cache/
 - `cache_poster(tmdb_id, url)` — fetches TMDB poster via reqwest, saves to poster-cache, returns data URL
 - `get_cached_poster(tmdb_id)` — returns cached poster as data URL or null
 - `clear_poster_cache()` — deletes all files in poster-cache/ (used by Settings)
 - `get_poster_cache_size()` — returns total cache size in bytes (used by Settings)
+- `write_to_downloads(filename, content)` — writes a file to public Downloads (MediaStore on Android)
 
 ### Key organisms
 - `MovieForm` — shared form used by both `AddMovieView` and `EditMovieView`. Owns TanStack Form state, accepts `initialValues` + `onSubmit` + `onCancel` props.
@@ -105,13 +106,9 @@ User selects result → form fields pre-filled:
 (same as manual entry from here)
 ```
 
-**Poster storage:** TMDB posters are stored as direct HTTPS URLs
-(`https://image.tmdb.org/t/p/w185/...`). The WebView loads them as `<img src>`
-just like any other network image. Phase 9 (deferred) will add `cache_poster`
-Rust command to download via reqwest (no CORS) and save locally.
+**Poster storage — TMDB:** TMDB poster paths (e.g. `/abc123.jpg`) are stored in `tmdb_poster_path` (migration v5). `poster_url` in SQLite always holds the locally-cached base64 data URL (fetched via the `cache_poster` Rust command on pull). `tmdb_poster_path` is the authoritative source for constructing full TMDB image URLs (e.g. when publishing to the public view).
 
-**Custom posters** (file picker) are stored as JPEG data URLs (base64-embedded)
-because Tauri's asset protocol cannot serve runtime-written files on Android.
+**Poster storage — Custom posters** (file picker) are stored as JPEG data URLs (base64-embedded) in `poster_url` because Tauri's asset protocol cannot serve runtime-written files on Android.
 
 ## Data Flow: Auto-Sync Triggers
 
@@ -162,6 +159,34 @@ Update sync_meta.last_synced_at → setConflicts(result.conflicts) → invalidat
 2. **The app works with no network.** Offline changes accumulate; auto-sync catches up on next trigger.
 3. **Soft deletes sync automatically.** Deleted rows are pushed to Supabase without confirmation (single-user app).
 4. **Last-write-wins + conflict detection.** The row with the newer `updated_at` wins. If both sides changed since last sync, the conflict is surfaced for user resolution rather than silently overwritten.
+
+## Public View (moviedb-view)
+
+A static GitHub Pages site at `https://sethgo88.github.io/moviedb-view/` displays the public collection.
+
+**Strategy:** The Tauri app exports a filtered `movies.json` and pushes it to the `sethgo88/moviedb-view` repo via the GitHub Contents API. The public site fetches `/movies.json` at runtime — no live Supabase required (Supabase is Tailscale-private).
+
+**Publish flow:**
+```
+"Publish to Web" button in SettingsView
+        ↓
+publishToWeb() — movies.service.ts
+        ↓
+SELECT active movies WHERE deleted_at IS NULL
+  (includes tmdb_poster_path, excludes personal_rating, notes, user_id, deleted_at)
+        ↓
+Construct TMDB poster URLs from tmdb_poster_path (https://image.tmdb.org/t/p/w185/...)
+        ↓
+GET /repos/sethgo88/moviedb-view/contents/public/movies.json → fetch current SHA
+        ↓
+PUT same endpoint — base64-encoded JSON payload + SHA for in-place update
+        ↓
+GitHub Pages site reflects new data on next page load (no rebuild needed)
+```
+
+**Auth:** `VITE_GITHUB_PAT` — fine-grained PAT (contents:write on moviedb-view only). Baked into the Vite bundle at build time. Never commit the `.env.local` file or distribute the APK publicly.
+
+**Supabase URL override:** The Supabase client URL is runtime-configurable via `localStorage` key `supabase_url_override`. Default is the Tailscale IP (`http://100.85.209.13:8000`). Changing it in SettingsView discards the current client instance and recreates it on next use.
 
 ## Tauri 2 Capabilities
 

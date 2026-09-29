@@ -256,8 +256,8 @@ export async function refreshTmdbData(): Promise<number> {
 			}
 
 			await db.execute(
-				`UPDATE movies SET year = $1, tmdb_rating = $2, poster_url = $3 WHERE id = $4`,
-				[year, tmdbRating, posterUrl, row.id],
+				`UPDATE movies SET year = $1, tmdb_rating = $2, poster_url = $3, tmdb_poster_path = $4 WHERE id = $5`,
+				[year, tmdbRating, posterUrl, posterPath, row.id],
 			);
 			count++;
 		} catch {

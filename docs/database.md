@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS movies (
     updated_at   TEXT NOT NULL,            -- ISO 8601 — maintained by trigger
     type         TEXT NOT NULL DEFAULT 'MOVIE',  -- 'MOVIE' | 'TV_SHOW' | 'TV_SEASON' | 'TV_EPISODE'
     show_id      TEXT,                     -- UUID ref to parent TV show row (nullable)
-    season_number INTEGER                  -- season number for TV_SEASON rows (nullable)
+    season_number INTEGER,                 -- season number for TV_SEASON rows (nullable)
+    tmdb_poster_path TEXT                  -- original TMDB path e.g. '/abc123.jpg' (nullable); used to construct public URLs
 );
 
 CREATE INDEX IF NOT EXISTS idx_movies_tmdb_id ON movies(tmdb_id);
@@ -68,7 +69,8 @@ END;
 
 ```sql
 CREATE TABLE sync_meta (
-    last_synced_at TEXT  -- null = never synced
+    id             INTEGER PRIMARY KEY,  -- added migration v4
+    last_synced_at TEXT                  -- null = never synced
 );
 
 INSERT INTO sync_meta (last_synced_at) VALUES (NULL);
@@ -113,6 +115,27 @@ let migrations = vec![
             ALTER TABLE movies ADD COLUMN show_id TEXT;
             ALTER TABLE movies ADD COLUMN season_number INTEGER;
         ",
+        kind: tauri_plugin_sql::MigrationKind::Up,
+    },
+    tauri_plugin_sql::Migration {
+        version: 4,
+        description: "fix_sync_meta_primary_key",
+        sql: "
+            CREATE TABLE IF NOT EXISTS sync_meta_new (
+                id INTEGER PRIMARY KEY,
+                last_synced_at TEXT
+            );
+            INSERT INTO sync_meta_new (last_synced_at)
+                SELECT last_synced_at FROM sync_meta LIMIT 1;
+            DROP TABLE sync_meta;
+            ALTER TABLE sync_meta_new RENAME TO sync_meta;
+        ",
+        kind: tauri_plugin_sql::MigrationKind::Up,
+    },
+    tauri_plugin_sql::Migration {
+        version: 5,
+        description: "add_tmdb_poster_path",
+        sql: "ALTER TABLE movies ADD COLUMN tmdb_poster_path TEXT;",
         kind: tauri_plugin_sql::MigrationKind::Up,
     },
     // Add new migrations here — never modify existing ones
@@ -191,10 +214,14 @@ Pending soft deletes exist?
 
 ## Poster Storage
 
-Two poster sources, both stored in `poster_url`:
+Two poster sources.
 
 ### Custom posters (file picker)
 `PosterPicker` → user picks image → Canvas resize to 185px wide → `canvas.toDataURL("image/jpeg", 0.85)` → JPEG data URL stored directly in `poster_url`. The Tauri asset protocol cannot serve runtime-written files on Android, so data URLs are used instead of file paths.
 
 ### TMDB posters
-Stored as direct HTTPS URLs (`https://image.tmdb.org/t/p/w185/...`). The WebView loads them as `<img src>` like any other network image. No local caching is implemented.
+On TMDB selection: the raw poster path (e.g. `/abc123.jpg`) is stored in `tmdb_poster_path`. `poster_url` is populated with the locally cached base64 data URL (fetched via the `cache_poster` Rust command on sync pull, or directly on add). The WebView loads `poster_url` as an `<img src>` data URL — no network request needed.
+
+**Why two columns?** `poster_url` after caching is a base64 data URL — not usable on the public web. `tmdb_poster_path` retains the original path so `publishToWeb()` can reconstruct a full TMDB HTTPS URL (`https://image.tmdb.org/t/p/w185/<path>`) for `movies.json`.
+
+**Backfilling:** Run "Refresh TMDB Data" in Settings to populate `tmdb_poster_path` for any movies added before migration v5.

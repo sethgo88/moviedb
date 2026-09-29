@@ -1,13 +1,12 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, RefreshCw } from "lucide-react";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useState } from "react";
 import { Spinner } from "../components/atoms/Spinner/spinner";
 import { movieKeys } from "../features/movies/movies.queries";
 import { useRunSync } from "../features/sync/sync.queries";
 import { resolveConflict } from "../features/sync/sync.service";
 import { showSyncToast, useSyncStore } from "../features/sync/sync.store";
 import type { SyncConflict } from "../features/sync/sync.types";
-import { autoLogin, isSupabaseAuthenticated } from "../lib/supabase";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -151,25 +150,6 @@ function ConflictCard({
 	);
 }
 
-// ─── Signing-in state ────────────────────────────────────────────────────────
-
-function SigningInState({ error }: { error: string | null }) {
-	return (
-		<div className="flex flex-col items-center gap-3 py-8 text-center">
-			{error ? (
-				<>
-					<AlertTriangle className="h-8 w-8 text-red-400" />
-					<p className="text-sm text-red-400">{error}</p>
-				</>
-			) : (
-				<>
-					<Spinner />
-					<p className="text-sm text-white/50">Signing in…</p>
-				</>
-			)}
-		</div>
-	);
-}
 
 // ─── Resolve all button ──────────────────────────────────────────────────────
 
@@ -420,33 +400,6 @@ function SyncControls() {
 // ─── Main view ───────────────────────────────────────────────────────────────
 
 export function SyncView() {
-	const queryClient = useQueryClient();
-	const [loginError, setLoginError] = useState<string | null>(null);
-
-	// Auth state is async — use a query so it loads cleanly.
-	const { data: isAuthenticated, isLoading } = useQuery({
-		queryKey: ["supabase-auth"],
-		queryFn: isSupabaseAuthenticated,
-	});
-
-	// Auto-login when session is confirmed missing.
-	const { mutate: doAutoLogin } = useMutation({
-		mutationFn: autoLogin,
-		onSuccess: () => {
-			setLoginError(null);
-			queryClient.setQueryData(["supabase-auth"], true);
-		},
-		onError: (e) => {
-			setLoginError(e instanceof Error ? e.message : "Sign-in failed");
-		},
-	});
-
-	useEffect(() => {
-		if (!isLoading && isAuthenticated === false && !loginError) {
-			doAutoLogin();
-		}
-	}, [isLoading, isAuthenticated, loginError, doAutoLogin]);
-
 	return (
 		<div className="flex h-full flex-col overflow-y-auto bg-gray-950 text-white">
 			{/* Header */}
@@ -455,16 +408,12 @@ export function SyncView() {
 			</div>
 
 			<div className="flex flex-col gap-6 p-4">
-				{!isAuthenticated || isLoading ? (
-					<SigningInState error={loginError} />
-				) : (
-					<section className="flex flex-col gap-3">
-						<h2 className="text-xs font-semibold uppercase tracking-widest text-white/40">
-							Supabase Sync
-						</h2>
-						<SyncControls />
-					</section>
-				)}
+				<section className="flex flex-col gap-3">
+					<h2 className="text-xs font-semibold uppercase tracking-widest text-white/40">
+						Supabase Sync
+					</h2>
+					<SyncControls />
+				</section>
 			</div>
 		</div>
 	);

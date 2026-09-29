@@ -1,5 +1,5 @@
 import { getDb } from "../../lib/db";
-import { getSupabase, resetSupabase } from "../../lib/supabase";
+import { autoLogin, getSupabase, resetSupabase } from "../../lib/supabase";
 import { cachePosterFromUrl } from "../tmdb/tmdb.service";
 import { SupabaseMovieRecordSchema, SyncResultSchema } from "./sync.schema";
 import { useSyncStore } from "./sync.store";
@@ -114,12 +114,18 @@ async function writeLastSyncedAt(db: DbHandle, ts: string): Promise<void> {
 }
 
 export async function runSync(): Promise<SyncResult> {
+	// Guard: bail out synchronously before any await so concurrent triggers
+	// (mount + focus firing in the same tick) can't both proceed.
+	if (useSyncStore.getState().isSyncing) {
+		throw new Error("Sync already in progress");
+	}
+
 	const { setSyncing, setLastSyncedAt, setError, clearError } =
 		useSyncStore.getState();
 
+	setSyncing(true); // set synchronously — must be before the first await
 	clearError();
 	useSyncStore.getState().setConflicts([]);
-	setSyncing(true);
 
 	// Capture the sync start time before any operations. Used as the pull
 	// filter baseline so records pushed during this run are skipped on pull,
@@ -589,7 +595,7 @@ export async function runSync(): Promise<SyncResult> {
 // Used by Trigger 3 in useAutoSync instead of a full runSync().
 // If the row is soft-deleted, pushes the delete to Supabase and hard-deletes locally.
 export async function pushOneMovie(id: string): Promise<void> {
-	const supabase = getSupabase();
+	const supabase = await getSupabase();
 	const {
 		data: { session: existingSession },
 	} = await supabase.auth.getSession();

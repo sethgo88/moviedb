@@ -6,12 +6,19 @@ import { ConfirmSheet } from "../components/molecules/ConfirmSheet/confirm-sheet
 import {
 	exportCollectionAsCsv,
 	exportCollectionAsJson,
+	publishToWeb,
 } from "../features/movies/movies.service";
 import {
 	clearPosterCache,
 	getPosterCacheSize,
 	refreshTmdbData,
 } from "../features/tmdb/tmdb.service";
+import {
+	getLocalUrl,
+	getTailscaleUrl,
+	setLocalUrl,
+	setTailscaleUrl,
+} from "../lib/supabase";
 
 function formatBytes(bytes: number): string {
 	if (bytes === 0) return "0 B";
@@ -84,6 +91,40 @@ export function SettingsView() {
 		onError: (e) => showToast(`Export failed: ${String(e)}`, "error"),
 	});
 
+	const [localUrl, setLocalUrlState] = useState(getLocalUrl);
+	const [tailscaleUrl, setTailscaleUrlState] = useState(getTailscaleUrl);
+
+	function isValidHttpUrl(s: string): boolean {
+		try {
+			const u = new URL(s);
+			return u.protocol === "http:" || u.protocol === "https:";
+		} catch {
+			return false;
+		}
+	}
+
+	function saveSupabaseUrls() {
+		// Empty field resets to default — validated only when non-empty.
+		if (localUrl && !isValidHttpUrl(localUrl)) {
+			showToast("Local URL must start with http:// or https://", "error");
+			return;
+		}
+		if (tailscaleUrl && !isValidHttpUrl(tailscaleUrl)) {
+			showToast("Tailscale URL must start with http:// or https://", "error");
+			return;
+		}
+		setLocalUrl(localUrl);
+		setTailscaleUrl(tailscaleUrl);
+		queryClient.invalidateQueries({ queryKey: ["tailscale-connectivity"] });
+		showToast("URLs saved");
+	}
+
+	const { mutate: doPublish, isPending: isPublishing } = useMutation({
+		mutationFn: publishToWeb,
+		onSuccess: () => showToast("Published to web"),
+		onError: (e) => showToast(`Publish failed: ${String(e)}`, "error"),
+	});
+
 	return (
 		<div className="flex h-full flex-col overflow-y-auto bg-gray-950 text-white">
 			<Toast
@@ -98,6 +139,57 @@ export function SettingsView() {
 			</div>
 
 			<div className="flex flex-col gap-6 p-4">
+				{/* Sync */}
+				<section className="flex flex-col gap-3">
+					<h2 className="text-xs font-semibold uppercase tracking-widest text-white/40">
+						Sync
+					</h2>
+					<div className="rounded-2xl border border-white/10 bg-gray-900">
+						<div className="px-4 py-3.5">
+							<p className="text-sm font-medium text-white">Server URLs</p>
+							<p className="mt-0.5 text-xs text-white/40">
+								Local network is tried first. Falls back to Tailscale if unreachable. Clear a field to reset to default.
+							</p>
+						</div>
+						<div className="h-px bg-white/10" />
+						<div className="flex items-center gap-2 px-4 py-3">
+							<span className="w-20 shrink-0 text-xs text-white/40">Local</span>
+							<input
+								type="url"
+								value={localUrl}
+								onChange={(e) => setLocalUrlState(e.target.value)}
+								className="flex-1 min-w-0 rounded-lg bg-white/10 px-3 py-2 text-xs text-white placeholder:text-white/30 outline-none focus:ring-1 focus:ring-white/20"
+								placeholder="http://192.168.0.172:8000"
+								autoCapitalize="none"
+								autoCorrect="off"
+								spellCheck={false}
+							/>
+						</div>
+						<div className="h-px bg-white/5" />
+						<div className="flex items-center gap-2 px-4 py-3">
+							<span className="w-20 shrink-0 text-xs text-white/40">Tailscale</span>
+							<input
+								type="url"
+								value={tailscaleUrl}
+								onChange={(e) => setTailscaleUrlState(e.target.value)}
+								className="flex-1 min-w-0 rounded-lg bg-white/10 px-3 py-2 text-xs text-white placeholder:text-white/30 outline-none focus:ring-1 focus:ring-white/20"
+								placeholder="http://100.85.209.13:8000"
+								autoCapitalize="none"
+								autoCorrect="off"
+								spellCheck={false}
+							/>
+						</div>
+						<div className="h-px bg-white/10" />
+						<button
+							type="button"
+							onClick={saveSupabaseUrls}
+							className="w-full px-4 py-3.5 text-left text-sm font-medium text-blue-400 transition-opacity active:opacity-70"
+						>
+							Save URLs
+						</button>
+					</div>
+				</section>
+
 				{/* TMDB */}
 				<section className="flex flex-col gap-3">
 					<h2 className="text-xs font-semibold uppercase tracking-widest text-white/40">
@@ -178,6 +270,31 @@ export function SettingsView() {
 							onClick={() => navigate({ to: "/import" })}
 						>
 							Import from Jellyfin CSV
+						</button>
+					</div>
+				</section>
+
+				{/* Public View */}
+				<section className="flex flex-col gap-3">
+					<h2 className="text-xs font-semibold uppercase tracking-widest text-white/40">
+						Public View
+					</h2>
+					<div className="rounded-2xl border border-white/10 bg-gray-900">
+						<div className="px-4 py-3.5">
+							<p className="text-sm font-medium text-white">Publish to Web</p>
+							<p className="mt-0.5 text-xs text-white/40">
+								Push your collection snapshot to the public site. Personal
+								ratings and notes are never included.
+							</p>
+						</div>
+						<div className="h-px bg-white/10" />
+						<button
+							type="button"
+							disabled={isPublishing}
+							className="w-full px-4 py-3.5 text-left text-sm font-medium text-blue-400 transition-opacity active:opacity-70 disabled:opacity-40"
+							onClick={() => doPublish()}
+						>
+							{isPublishing ? "Publishing…" : "Publish to Web"}
 						</button>
 					</div>
 				</section>

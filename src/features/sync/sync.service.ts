@@ -1,5 +1,5 @@
 import { getDb } from "../../lib/db";
-import { getSupabase } from "../../lib/supabase";
+import { getSupabase, resetSupabase } from "../../lib/supabase";
 import { cachePosterFromUrl } from "../tmdb/tmdb.service";
 import {
 	SupabaseMovieRecordSchema,
@@ -109,7 +109,10 @@ export async function runSync(): Promise<SyncResult> {
 	const conflicts: SyncConflict[] = [];
 
 	try {
-		const supabase = getSupabase();
+		// Re-probe URLs on every sync so network changes (home ↔ remote) are
+		// picked up automatically without restarting the app.
+		resetSupabase();
+		const supabase = await getSupabase();
 
 		const {
 			data: { session },
@@ -463,7 +466,7 @@ export async function resolveConflict(
 	conflict: SyncConflict,
 	winner: "local" | "remote",
 ): Promise<void> {
-	const supabase = getSupabase();
+	const supabase = await getSupabase();
 	const db = await getDb();
 
 	if (winner === "local") {
@@ -476,10 +479,13 @@ export async function resolveConflict(
 			[bumpedAt, conflict.id],
 		);
 		const [updatedRow] = await db.select<LocalMovieRow[]>(
-			"SELECT * FROM movies WHERE id = $1",
+			"SELECT * FROM movies WHERE id = $1 AND deleted_at IS NULL",
 			[conflict.id],
 		);
-		if (!updatedRow) throw new Error(`Movie ${conflict.id} not found locally`);
+		if (!updatedRow)
+			throw new Error(
+				`Movie ${conflict.id} was deleted locally — dismiss this conflict instead of resolving it.`,
+			);
 
 		const {
 			data: { session },

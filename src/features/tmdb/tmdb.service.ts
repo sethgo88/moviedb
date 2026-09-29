@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { getDb } from "../../lib/db";
 import {
 	TmdbMovieDetailsSchema,
@@ -20,7 +21,7 @@ export const TMDB_POSTER_BASE = "https://image.tmdb.org/t/p/w185";
 
 export async function searchMovies(query: string): Promise<TmdbSearchResult[]> {
 	const url = `${TMDB_BASE}/search/movie?query=${encodeURIComponent(query)}&api_key=${TMDB_API_KEY}&language=en-US&page=1`;
-	const res = await fetch(url);
+	const res = await (tauriFetch as unknown as typeof globalThis.fetch)(url);
 	if (!res.ok) throw new Error(`TMDB error: ${res.status}`);
 	const data = TmdbSearchResponseSchema.parse(await res.json());
 	return data.results;
@@ -31,7 +32,7 @@ export async function searchMovieByTitleYear(
 	year: number,
 ): Promise<TmdbSearchResult[]> {
 	const url = `${TMDB_BASE}/search/movie?query=${encodeURIComponent(title)}&primary_release_year=${year}&api_key=${TMDB_API_KEY}&language=en-US&page=1`;
-	const res = await fetch(url);
+	const res = await (tauriFetch as unknown as typeof globalThis.fetch)(url);
 	if (!res.ok) throw new Error(`TMDB error: ${res.status}`);
 	const data = TmdbSearchResponseSchema.parse(await res.json());
 	return data.results;
@@ -75,7 +76,7 @@ export async function cachePosterFromUrl(
  */
 async function fetchTmdbPosterPath(tmdbId: number): Promise<string | null> {
 	const url = `${TMDB_BASE}/movie/${tmdbId}?api_key=${TMDB_API_KEY}`;
-	const res = await fetch(url);
+	const res = await (tauriFetch as unknown as typeof globalThis.fetch)(url);
 	if (!res.ok) return null;
 	const data = TmdbMovieDetailsSchema.parse(await res.json());
 	return data.poster_path;
@@ -128,7 +129,7 @@ export async function searchShows(
 	query: string,
 ): Promise<TmdbTvSearchResult[]> {
 	const url = `${TMDB_BASE}/search/tv?query=${encodeURIComponent(query)}&api_key=${TMDB_API_KEY}&language=en-US&page=1`;
-	const res = await fetch(url);
+	const res = await (tauriFetch as unknown as typeof globalThis.fetch)(url);
 	if (!res.ok) throw new Error(`TMDB error: ${res.status}`);
 	const data = TmdbTvSearchResponseSchema.parse(await res.json());
 	return data.results;
@@ -138,7 +139,7 @@ export async function fetchShowDetails(
 	tmdbShowId: number,
 ): Promise<TmdbShowDetails> {
 	const url = `${TMDB_BASE}/tv/${tmdbShowId}?api_key=${TMDB_API_KEY}`;
-	const res = await fetch(url);
+	const res = await (tauriFetch as unknown as typeof globalThis.fetch)(url);
 	if (!res.ok) throw new Error(`TMDB error: ${res.status}`);
 	return TmdbShowDetailsSchema.parse(await res.json());
 }
@@ -151,11 +152,10 @@ export async function fetchSeasonDetails(
 	tmdbShowId: number,
 	seasonNumber: number,
 ): Promise<TmdbSeasonDetails> {
+	const t = tauriFetch as unknown as typeof globalThis.fetch;
 	const [seasonRes, showRes] = await Promise.all([
-		fetch(
-			`${TMDB_BASE}/tv/${tmdbShowId}/season/${seasonNumber}?api_key=${TMDB_API_KEY}`,
-		),
-		fetch(`${TMDB_BASE}/tv/${tmdbShowId}?api_key=${TMDB_API_KEY}`),
+		t(`${TMDB_BASE}/tv/${tmdbShowId}/season/${seasonNumber}?api_key=${TMDB_API_KEY}`),
+		t(`${TMDB_BASE}/tv/${tmdbShowId}?api_key=${TMDB_API_KEY}`),
 	]);
 	if (!seasonRes.ok) throw new Error(`TMDB error: ${seasonRes.status}`);
 	const season = TmdbSeasonDetailsSchema.parse(await seasonRes.json());
@@ -198,7 +198,7 @@ export async function refreshTmdbData(): Promise<number> {
 
 			if (row.type === "MOVIE") {
 				const url = `${TMDB_BASE}/movie/${row.tmdb_id}?api_key=${TMDB_API_KEY}`;
-				const res = await fetch(url);
+				const res = await (tauriFetch as unknown as typeof globalThis.fetch)(url);
 				if (!res.ok) continue;
 				const data = TmdbMovieDetailsSchema.parse(await res.json());
 				year = data.release_date
@@ -208,7 +208,7 @@ export async function refreshTmdbData(): Promise<number> {
 				posterPath = data.poster_path;
 			} else if (row.type === "TV_SHOW") {
 				const url = `${TMDB_BASE}/tv/${row.tmdb_id}?api_key=${TMDB_API_KEY}`;
-				const res = await fetch(url);
+				const res = await (tauriFetch as unknown as typeof globalThis.fetch)(url);
 				if (!res.ok) continue;
 				const data = TmdbShowDetailsSchema.parse(await res.json());
 				year = data.first_air_date
@@ -221,11 +221,10 @@ export async function refreshTmdbData(): Promise<number> {
 				row.show_tmdb_id != null &&
 				row.season_number != null
 			) {
+				const t = tauriFetch as unknown as typeof globalThis.fetch;
 				const [seasonRes, showRes] = await Promise.all([
-					fetch(
-						`${TMDB_BASE}/tv/${row.show_tmdb_id}/season/${row.season_number}?api_key=${TMDB_API_KEY}`,
-					),
-					fetch(`${TMDB_BASE}/tv/${row.show_tmdb_id}?api_key=${TMDB_API_KEY}`),
+					t(`${TMDB_BASE}/tv/${row.show_tmdb_id}/season/${row.season_number}?api_key=${TMDB_API_KEY}`),
+					t(`${TMDB_BASE}/tv/${row.show_tmdb_id}?api_key=${TMDB_API_KEY}`),
 				]);
 				if (!seasonRes.ok) continue;
 				const season = TmdbSeasonDetailsSchema.parse(await seasonRes.json());

@@ -1,6 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useRef } from "react";
-import { useRunSync } from "../features/sync/sync.queries";
+import { usePushOneMovie, useRunSync } from "../features/sync/sync.queries";
 import { showSyncToast, useSyncStore } from "../features/sync/sync.store";
 
 const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
@@ -16,7 +16,7 @@ function isStale(lastSyncedAt: string | null): boolean {
  * Mounts three auto-sync triggers:
  * 1. On mount — sync if stale (> 5 min or never synced).
  * 2. On window focus — sync if stale.
- * 3. Debounced on syncTriggerAt — fires ~1.5s after any movie mutation.
+ * 3. Debounced on pendingSyncMovieId — pushes only the changed movie ~1.5s after a mutation.
  *
  * Note: triggers 1 and 2 use useEffect to fire a mutation on a lifecycle/focus
  * event — this is not data fetching and is intentionally outside TanStack Query.
@@ -26,11 +26,14 @@ function isStale(lastSyncedAt: string | null): boolean {
 
 export function useAutoSync() {
 	const { mutate: runSync } = useRunSync();
-	const syncTriggerAt = useSyncStore((s) => s.syncTriggerAt);
+	const { mutate: pushOneMovie } = usePushOneMovie();
+	const pendingSyncMovieId = useSyncStore((s) => s.pendingSyncMovieId);
 	const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-	// Capture a stable ref to runSync so effects don't re-register on every render.
+	// Capture stable refs so effects don't re-register on every render.
 	const runSyncRef = useRef(runSync);
 	runSyncRef.current = runSync;
+	const pushOneMovieRef = useRef(pushOneMovie);
+	pushOneMovieRef.current = pushOneMovie;
 
 	function triggerSync() {
 		runSyncRef.current(undefined, {
@@ -41,7 +44,9 @@ export function useAutoSync() {
 					result.deletedMovies.length +
 					result.dedupedMovies.length;
 				showSyncToast(
-					total > 0 ? `Synced ${total} item${total === 1 ? "" : "s"}` : "Already up to date",
+					total > 0
+						? `Synced ${total} item${total === 1 ? "" : "s"}`
+						: "Already up to date",
 					"success",
 				);
 			},
@@ -80,17 +85,22 @@ export function useAutoSync() {
 		};
 	}, []);
 
-	// Trigger 3: debounced sync when a movie mutation calls requestSync().
-	// biome-ignore lint/correctness/useExhaustiveDependencies: runSyncRef is a stable ref, not a dep
+	// Trigger 3: push only the changed movie after a mutation.
+	// Debounced 1.5s to coalesce rapid edits to the same movie.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: refs are stable
 	useEffect(() => {
-		if (!syncTriggerAt) return;
+		if (!pendingSyncMovieId) return;
+		const id = pendingSyncMovieId;
 		if (debounceRef.current) clearTimeout(debounceRef.current);
 		debounceRef.current = setTimeout(() => {
-			const { isSyncing } = useSyncStore.getState();
-			if (!isSyncing) triggerSync();
+			useSyncStore.getState().clearPendingSync();
+			pushOneMovieRef.current(id, {
+				onSuccess: () => showSyncToast("Synced", "success"),
+				onError: () => showSyncToast("Could not sync", "error"),
+			});
 		}, 1500);
 		return () => {
 			if (debounceRef.current) clearTimeout(debounceRef.current);
 		};
-	}, [syncTriggerAt]);
+	}, [pendingSyncMovieId]);
 }

@@ -1,14 +1,17 @@
 import { X } from "lucide-react";
+import { useRef } from "react";
 import { useMoviesStore } from "../../../features/movies/movies.store";
 
 export function SearchBar() {
 	const search = useMoviesStore((s) => s.search);
 	const setSearch = useMoviesStore((s) => s.setSearch);
 	const hasSearch = search.length > 0;
+	const inputRef = useRef<HTMLInputElement>(null);
 
 	return (
 		<div className="relative w-full">
 			<input
+				ref={inputRef}
 				type="text"
 				value={search}
 				onChange={(e) => setSearch(e.target.value)}
@@ -19,7 +22,10 @@ export function SearchBar() {
 				<button
 					type="button"
 					aria-label="Clear search"
-					onClick={() => setSearch("")}
+					onClick={() => {
+						setSearch("");
+						inputRef.current?.focus();
+					}}
 					className="absolute inset-y-[2px] right-[2px] flex w-11 items-center justify-center rounded-md bg-blue-600 active:bg-blue-700"
 				>
 					<X size={18} className="text-white" />

@@ -2,16 +2,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
 import { Spinner } from "../components/atoms/Spinner/spinner";
+import { movieKeys } from "../features/movies/movies.queries";
 import { useRunSync } from "../features/sync/sync.queries";
 import { resolveConflict } from "../features/sync/sync.service";
 import { showSyncToast, useSyncStore } from "../features/sync/sync.store";
 import type { SyncConflict } from "../features/sync/sync.types";
-import { movieKeys } from "../features/movies/movies.queries";
-import {
-	autoLogin,
-	isSupabaseAuthenticated,
-	logoutSupabase,
-} from "../lib/supabase";
+import { autoLogin, isSupabaseAuthenticated } from "../lib/supabase";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -175,9 +171,55 @@ function SigningInState({ error }: { error: string | null }) {
 	);
 }
 
+// ─── Resolve all button ──────────────────────────────────────────────────────
+
+function ResolveAllButton({ conflicts }: { conflicts: SyncConflict[] }) {
+	const queryClient = useQueryClient();
+	const [resolving, setResolving] = useState(false);
+
+	const timestampOnly = conflicts.filter((c) =>
+		DIFF_FIELDS.every(({ key }) => c.local[key] === c.remote[key]),
+	);
+
+	if (timestampOnly.length === 0) return null;
+
+	async function handleResolveAll() {
+		setResolving(true);
+		try {
+			for (const conflict of timestampOnly) {
+				await resolveConflict(conflict, "local");
+				useSyncStore.getState().removeConflict(conflict.id);
+			}
+			queryClient.invalidateQueries({ queryKey: movieKeys.all });
+			showSyncToast(
+				`Resolved ${timestampOnly.length} timestamp conflicts`,
+				"success",
+			);
+		} catch (e) {
+			showSyncToast(
+				e instanceof Error ? e.message : "Bulk resolve failed",
+				"error",
+			);
+		} finally {
+			setResolving(false);
+		}
+	}
+
+	return (
+		<button
+			type="button"
+			disabled={resolving}
+			onClick={handleResolveAll}
+			className="text-xs font-semibold text-yellow-400 underline underline-offset-2 transition-opacity active:opacity-70 disabled:opacity-40"
+		>
+			{resolving ? "Resolving…" : `Resolve all (${timestampOnly.length})`}
+		</button>
+	);
+}
+
 // ─── Sync controls ───────────────────────────────────────────────────────────
 
-function SyncControls({ onLogout }: { onLogout: () => void }) {
+function SyncControls() {
 	const { isSyncing, lastSyncedAt, error, conflicts } = useSyncStore();
 	const { mutate: runSync, data: syncResult } = useRunSync();
 
@@ -197,10 +239,7 @@ function SyncControls({ onLogout }: { onLogout: () => void }) {
 				);
 			},
 			onError: (e) => {
-				showSyncToast(
-					e instanceof Error ? e.message : "Sync failed",
-					"error",
-				);
+				showSyncToast(e instanceof Error ? e.message : "Sync failed", "error");
 			},
 		});
 	}
@@ -215,7 +254,6 @@ function SyncControls({ onLogout }: { onLogout: () => void }) {
 
 	return (
 		<div className="flex flex-col gap-4">
-
 			{/* Sync button + status */}
 			<div className="rounded-2xl border border-white/10 bg-gray-900">
 				<div className="flex items-center justify-between px-4 py-3.5">
@@ -347,9 +385,12 @@ function SyncControls({ onLogout }: { onLogout: () => void }) {
 			{/* Conflict resolution cards */}
 			{conflicts.length > 0 && (
 				<div className="flex flex-col gap-3">
-					<h3 className="text-xs font-semibold uppercase tracking-widest text-yellow-400">
-						Conflicts ({conflicts.length})
-					</h3>
+					<div className="flex items-center justify-between">
+						<h3 className="text-xs font-semibold uppercase tracking-widest text-yellow-400">
+							Conflicts ({conflicts.length})
+						</h3>
+						<ResolveAllButton conflicts={conflicts} />
+					</div>
 					{conflicts.map((conflict) => (
 						<ConflictCard
 							key={conflict.id}
@@ -363,7 +404,7 @@ function SyncControls({ onLogout }: { onLogout: () => void }) {
 			)}
 
 			{/* Sign out */}
-			<div className="rounded-2xl border border-white/10 bg-gray-900">
+			{/* <div className="rounded-2xl border border-white/10 bg-gray-900">
 				<button
 					type="button"
 					onClick={onLogout}
@@ -371,7 +412,7 @@ function SyncControls({ onLogout }: { onLogout: () => void }) {
 				>
 					Sign Out
 				</button>
-			</div>
+			</div> */}
 		</div>
 	);
 }
@@ -406,15 +447,6 @@ export function SyncView() {
 		}
 	}, [isLoading, isAuthenticated, loginError, doAutoLogin]);
 
-	async function handleLogout() {
-		try {
-			await logoutSupabase();
-		} catch {
-			// Clear local session regardless — best-effort remote sign-out.
-		}
-		queryClient.setQueryData(["supabase-auth"], false);
-	}
-
 	return (
 		<div className="flex h-full flex-col overflow-y-auto bg-gray-950 text-white">
 			{/* Header */}
@@ -430,7 +462,7 @@ export function SyncView() {
 						<h2 className="text-xs font-semibold uppercase tracking-widest text-white/40">
 							Supabase Sync
 						</h2>
-						<SyncControls onLogout={handleLogout} />
+						<SyncControls />
 					</section>
 				)}
 			</div>

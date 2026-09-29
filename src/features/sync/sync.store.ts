@@ -11,7 +11,7 @@ interface SyncState {
 	lastSyncedAt: string | null;
 	error: string | null;
 	conflicts: SyncConflict[];
-	syncTriggerAt: number | null;
+	pendingSyncMovieId: string | null;
 	syncToast: SyncToast | null;
 	setSyncing: (b: boolean) => void;
 	setLastSyncedAt: (ts: string | null) => void;
@@ -19,7 +19,8 @@ interface SyncState {
 	clearError: () => void;
 	setConflicts: (conflicts: SyncConflict[]) => void;
 	removeConflict: (id: string) => void;
-	requestSync: () => void;
+	requestSyncMovie: (id: string) => void;
+	clearPendingSync: () => void;
 }
 
 let _toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -29,7 +30,7 @@ export const useSyncStore = create<SyncState>()((set) => ({
 	lastSyncedAt: null,
 	error: null,
 	conflicts: [],
-	syncTriggerAt: null,
+	pendingSyncMovieId: null,
 	syncToast: null,
 	setSyncing: (b) => set({ isSyncing: b }),
 	setLastSyncedAt: (ts) => set({ lastSyncedAt: ts }),
@@ -38,7 +39,8 @@ export const useSyncStore = create<SyncState>()((set) => ({
 	setConflicts: (conflicts) => set({ conflicts }),
 	removeConflict: (id) =>
 		set((s) => ({ conflicts: s.conflicts.filter((c) => c.id !== id) })),
-	requestSync: () => set({ syncTriggerAt: Date.now() }),
+	requestSyncMovie: (id) => set({ pendingSyncMovieId: id }),
+	clearPendingSync: () => set({ pendingSyncMovieId: null }),
 }));
 
 /** Show a sync toast and auto-dismiss after 3 s. Safe to call from anywhere. */

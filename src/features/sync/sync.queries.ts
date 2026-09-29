@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { movieKeys } from "../movies/movies.queries";
-import { runSync } from "./sync.service";
+import { pushOneMovie, runSync } from "./sync.service";
 import { useSyncStore } from "./sync.store";
 
 export function useRunSync() {
@@ -10,6 +10,16 @@ export function useRunSync() {
 		onSuccess: (result) => {
 			queryClient.invalidateQueries({ queryKey: movieKeys.all });
 			useSyncStore.getState().setConflicts(result.conflicts);
+		},
+	});
+}
+
+export function usePushOneMovie() {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (id: string) => pushOneMovie(id),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: movieKeys.all });
 		},
 	});
 }

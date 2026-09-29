@@ -18,7 +18,7 @@
 			}
 		],
 		"security": {
-			"csp": null
+			"csp": "default-src 'self'; connect-src 'self' http://100.85.209.13:8100 ws://100.85.209.13:8100; img-src 'self' data: blob: http://100.85.209.13:8100 https://image.tmdb.org; style-src 'self' 'unsafe-inline'; script-src 'self'"
 		}
 	},
 	"bundle": {

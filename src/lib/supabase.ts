@@ -8,7 +8,7 @@ import type { Database } from "./database.types";
 const LOCAL_URL_DEFAULT = "http://192.168.0.172:8000";
 const TAILSCALE_URL_DEFAULT = "http://100.85.209.13:8000";
 const SUPABASE_ANON_KEY =
-	"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg5Njc1MTY5LCJleHAiOjE5NDczNTUxNjl9._7kXzTsI2KNfy8RlPx57zTXZDcdqRf2kUBevOpT3W_A";
+	"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkwMDQ3NTIzLCJleHAiOjI1MjQ2MDgwMDB9.QLwx0Z4dttScDehBGtYAqlFMDEe2NjiQJCjG5bIsFmI";
 const SUPABASE_EMAIL = "seth.oharra@gmail.com";
 // Fail loudly at startup if the env var is missing rather than silently sending
 // the string "undefined" as the password.

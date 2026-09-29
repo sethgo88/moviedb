@@ -57,7 +57,7 @@ export function MovieCard({ movie }: MovieCardProps) {
 							<p className="text-sm text-white">{movie.year}</p>
 						)}
 						<div className="mt-1 flex flex-wrap gap-1.5">
-							<Badge label={movie.status} className={statusClassName} />
+							<Badge label={movie.status === "OWNED" ? "Own" : "Want"} className={statusClassName} />
 							<Badge
 								label={movie.format}
 								className="bg-white/10 text-white/70"

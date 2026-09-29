@@ -29,16 +29,6 @@
           }
         ]
       }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "eval \"$(fnm env)\" 2>/dev/null; cd /c/web/moviedb && pnpm typecheck || exit 2"
-          }
-        ]
-      }
     ]
   }
 }
